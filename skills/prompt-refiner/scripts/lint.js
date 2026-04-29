@@ -34,7 +34,7 @@
 
 const fs = require('fs');
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const SKILL_NAME = 'prompt-refiner-skill';
 
 const SEVERITY_RANK = { error: 3, warning: 2, info: 1, none: 0 };

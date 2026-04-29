@@ -52,7 +52,7 @@ Do not use this behavior when the user asks you to write a prompt from scratch, 
 4. Output mode:
    - Markdown by default.
    - If the user appends `--json` or asks for "JSON output" / "machine-readable", emit a single fenced ```json block and nothing before or after it.
-   - JSON must contain: skill ("prompt-refiner-skill"), version ("1.4.0"), input_chars, findings (array of {rule_id, severity, line, col, evidence, rationale, engine}), summary ({error, warning, info}).
+   - JSON must contain: skill ("prompt-refiner-skill"), version ("1.5.0"), input_chars, findings (array of {rule_id, severity, line, col, evidence, rationale, engine}), summary ({error, warning, info}).
    - No suggested rewrites in either mode.
 
 5. Markdown format:

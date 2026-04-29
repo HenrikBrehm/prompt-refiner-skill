@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.5.0] - 2026-04-29
+
+**Self-contained skill packaging + engine-tagged Markdown output.**
+
+### Added
+- `skills/prompt-refiner/` is now a self-contained skill: bundles its own `references/`, `schemas/`, `scripts/`, and CI `recipes/`. Users can copy the directory into `.claude/skills/` without pulling the rest of the repo.
+- `SKILL.md` frontmatter gains `when_to_use` and `argument-hint` fields; paths use `${CLAUDE_SKILL_DIR}` so the skill works from any working directory.
+
+### Changed
+- Markdown report tags every finding with the engine that produced it: `_(deterministic)_`, `_(model)_`, or `_(hybrid)_`. JSON output already carried this; Markdown now matches.
+- Plugin and README descriptions clarified to reflect the hybrid coverage split (18 deterministic + 2 pure-model + 3 hybrid).
+
+### Notes
+- Top-level `references/`, `schemas/`, `scripts/` retained as the canonical development sources. The bundled skill copies are the canonical install target.
+- No rule changes; conformance still 25/25.
+
+---
+
 ## [1.4.0] - 2026-04-29
 
 **Catalog expansion + reproducibility fix.** The rule catalog grows from 13 to 20 rules, and the deterministic engine's coverage grows from 8 of 13 (62 %) to 18 of 20 (90 %). Run-to-run drift on the model layer is now bounded to 2 truly-semantic rules (`PR003` antecedent resolution, `PR009` persona comparison) instead of 5.
