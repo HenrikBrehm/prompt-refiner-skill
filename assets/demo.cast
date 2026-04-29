@@ -1,0 +1,10 @@
+{"version": 2, "width": 100, "height": 24, "timestamp": 1714400000, "title": "prompt-refiner-skill demo", "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"}}
+[0.0, "o", "$ claude --skill prompt-refiner-skill\n"]
+[0.6, "o", "> paste your prompt, end with Ctrl-D\n"]
+[1.2, "o", "Handle the customer feedback we got last week and write a tweet about it.\n"]
+[2.4, "o", "\n"]
+[2.6, "o", "PR001 [warning] 1:1  Handle  - vague action verb; name the transformation.\n"]
+[3.0, "o", "PR002 [error]   1:1  Handle ... and write a tweet  - two distinct intents in one instruction.\n"]
+[3.4, "o", "PR003 [warning] 1:60 it      - ambiguous antecedent (feedback vs tweet).\n"]
+[3.8, "o", "\nsummary: 1 error, 2 warnings, 0 info\n"]
+[4.4, "o", "$ \n"]

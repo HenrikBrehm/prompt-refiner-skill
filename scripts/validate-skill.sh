@@ -81,11 +81,11 @@ check_skill_md() {
       err "$f frontmatter missing required field: $k"
     fi
   done
-  if ! grep -F '## Improved prompt' "$f" >/dev/null; then
-    err "$f body must reference the '## Improved prompt' output section"
+  if ! grep -F 'references/lint-rules.md' "$f" >/dev/null; then
+    err "$f body must reference references/lint-rules.md"
   fi
-  if ! grep -F '## Result' "$f" >/dev/null; then
-    err "$f body must reference the '## Result' output section"
+  if ! grep -F '## Use when' "$f" >/dev/null; then
+    err "$f body must have a '## Use when' routing section"
   fi
   ok "$f"
 }

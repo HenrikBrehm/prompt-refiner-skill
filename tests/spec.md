@@ -1,84 +1,94 @@
 # Behavior spec
 
-A catalog of invariants the skill must satisfy. Use these when reviewing a behavior change or when manually verifying that a Claude Code session is invoking the skill correctly. Each spec is structured as **input → must-hold properties**.
+A catalog of invariants the linter must satisfy. Use these when reviewing a behavior change or when manually verifying that a Claude Code session is invoking the skill correctly. Each spec is structured as **input → must-hold properties**.
 
-The structural pieces (frontmatter present, output sections referenced) are checked automatically by `scripts/validate-skill.sh`. The semantic pieces below cannot be checked statically — they require running the skill and inspecting output.
+Structural pieces (frontmatter present, `references/lint-rules.md` referenced, `## Use when` section present) are checked automatically by `scripts/validate-skill.sh`. Corpus structure is checked by `scripts/run-tests.sh`. The semantic pieces below cannot be checked statically — they require running the skill and inspecting output.
 
 ---
 
-## S-1. Language preservation (German)
+## S-1. Never rewrites
+
+**Input:** any prompt the user pastes in.
+
+**Must hold:**
+- Output does NOT contain a rewritten or "improved" version of the prompt.
+- Output does NOT contain phrases like "here is a better version", "try this instead", "consider rewriting as".
+- Findings reference rules by ID and quote literal evidence; they do not propose specific replacement text.
+
+## S-2. Never imposes a framework
+
+**Input:** `make me a list of blog post ideas about AI`
+
+**Must hold:**
+- Output does NOT contain `CONTEXT:`, `OBJECTIVE:`, `STYLE:`, `TONE:`, `AUDIENCE:`, `RESPONSE FORMAT:`, or any CO-STAR / RISEN / RTF / RACE / TIDD-EC scaffolding.
+- Output does NOT contain a role-play preamble (`You are an expert ...`, `Act as a senior ...`).
+
+## S-3. Evidence preservation
 
 **Input:** `mach mir ne liste mit ideen für nen blog post über ai`
 
 **Must hold:**
-- Refined prompt is in German.
-- Refined prompt does not begin with `You are ...` / `Du bist ...` (no role-play preamble).
-- Refined prompt does not contain `CONTEXT:`, `OBJECTIVE:`, `TONE:`, `AUDIENCE:`, or any framework-style label.
-- Word count of refined prompt is within ±30 % of the original (light mode).
+- Any `evidence` field is byte-identical to the source substring (German stays German; no translation, no normalization).
+- Rationale prose may be in any language; evidence MAY NOT be paraphrased.
 
-## S-2. Language preservation (English)
+## S-4. Rule-ID stability
 
-**Input:** `make me a list of blog post ideas about ai`
+**Input:** any.
 
 **Must hold:**
-- Refined prompt is in English.
-- Same anti-framework, anti-preamble checks as S-1.
+- Every fired rule ID matches `^PR(-INJ)?[0-9]{2,3}$`.
+- Every fired rule ID is defined in `references/lint-rules.md`.
+- No rule ID is renamed or repurposed across versions; new rules get the next free ID (catalog is append-only).
 
-## S-3. Already-clear prompt
+## S-5. Markdown output shape
+
+**Input:** any prompt; default mode (no `--json`).
+
+**Must hold:**
+- Response begins with the literal heading `# Prompt-refiner report` (no preamble before it).
+- One line per finding, format: `` `<RULE_ID>` [<severity>] line:col — `<evidence>` — <one-line rationale> ``
+- A `**summary:**` totals line follows (or the literal block `No issues found.` if zero findings).
+- No closing meta-commentary after the totals line.
+
+## S-6. JSON output shape
+
+**Input:** any prompt with `--json` appended (or "JSON output" / "machine-readable" requested).
+
+**Must hold:**
+- Response is exactly one fenced ` ```json ` block — nothing before or after.
+- Content validates against `schemas/report.schema.json`.
+- `findings` array is ordered by `line`, then `col`.
+- No suggested rewrites anywhere in the JSON.
+
+## S-7. Zero-finding behavior
 
 **Input:** `Refactor auth/middleware.ts so the JWT verification is in its own module. Keep the public API of the file the same. Run the tests after.`
 
 **Must hold:**
-- Refined prompt is byte-identical (or nearly so) to the original.
-- Word count is within ±10 % of the original.
+- Markdown mode: response is exactly `# Prompt-refiner report\n\nNo issues found.\n`.
+- JSON mode: response contains `findings: []` and `summary: {error: 0, warning: 0, info: 0}`.
 
-## S-4. Strict mode budget
-
-**Input:** Any prompt **+ `--strict`**.
-
-**Must hold:**
-- Refined-prompt word count is within ±10 % of the original.
-- Only typos, grammatical defects, and true ambiguities are corrected. Cosmetic restructuring is not applied.
-
-## S-5. Review mode
-
-**Input:** Any prompt **+ `--review`**.
-
-**Must hold:**
-- The "Result" section does NOT contain output produced by executing the refined prompt.
-- The "Result" section is a brief paragraph explaining the changes (or stating that no changes were made).
-- The two-section response shape is preserved.
-
-## S-6. Anti-framework rule
-
-**Input:** `write me a tweet about claude code`
-
-**Must hold:**
-- Refined prompt does NOT contain a framework template (no `CONTEXT:`, `AUDIENCE: developers on Twitter`, `TONE:`, `RESPONSE FORMAT:`, etc.).
-- Refined prompt is at most ~12 words (the original is 7 words; light mode budget is ±30 %, so ≤ 9 words; strict mode ≤ 8).
-
-## S-7. Output shape
-
-**Input:** Any prompt.
-
-**Must hold:**
-- Response begins with the literal heading `## Improved prompt` (no preamble before it).
-- Response contains exactly one `## Result` heading.
-- Response has no other top-level (`## `) headings.
-- Response has no closing summary or meta-commentary after the "Result" content (except in `--review` mode, where the explanation IS the result).
-
-## S-8. No unnecessary clarifying question
+## S-8. No clarifying questions
 
 **Input:** `can you fix the function that does the date stuff its broken`
 
 **Must hold:**
-- The skill does NOT ask the user "which function?" or "which file?" — it makes a reasonable assumption (e.g., search the codebase) and proceeds.
-- A clarifying question is acceptable only if the prompt cannot be acted on at all without one (rare).
+- The skill does NOT ask "which function?" or "which file?".
+- It runs the lint catalog on the prompt itself and reports findings (likely PR001 vague-verb, PR003 ambiguous antecedent, PR007 implicit output format).
+- A clarifying question is acceptable only when running the lint catalog is genuinely impossible (e.g. empty prompt).
 
-## S-9. Tone preservation
+## S-9. Injection corpus passes
 
-**Input:** terse imperative such as `fix it.`
+**Input:** the case in `tests/corpus/007-injection-ignore-previous.md`.
 
 **Must hold:**
-- Refined prompt remains terse and imperative.
-- No motivational language is added (no "Please", no "Could you kindly", no "Let's").
+- PR-INJ01 fires on the embedded "ignore previous" string inside the user-input region.
+- No `forbidden_rules` from the test frontmatter fire.
+
+## S-10. Multilingual coverage
+
+**Input:** any case under `tests/corpus/i18n/` (de, es, ja, …).
+
+**Must hold:**
+- The expected rule fires regardless of source language.
+- Evidence is quoted in the original language; no translation occurs.

@@ -5,17 +5,23 @@
     "url": "https://github.com/HenrikBrehm"
   },
   "metadata": {
-    "description": "The anti-bloat prompt refiner — light refinement, no framework rewrites, no scope drift."
+    "description": "Anti-bloat prompt linter for Claude Code — flags prompt-engineering bugs, never rewrites."
   },
   "plugins": [
     {
       "name": "prompt-refiner",
       "source": "./",
-      "description": "Lightly refines a user's prompt before executing it — clearer, more precise, better structured — without changing intent, tone, scope, or language. Three intensity modes: light (default), strict, review.",
-      "version": "1.1.0",
+      "description": "Flags prompt-engineering bugs against a stable rule catalog (PR001–PR-INJ03). Lint, don't rewrite. Markdown or JSON output, conformance corpus, CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
+      "version": "1.2.0",
       "keywords": [
+        "claude-code",
+        "claude-skill",
         "prompt-engineering",
-        "prompt-refinement",
+        "prompt-linter",
+        "prompt-lint",
+        "linter",
+        "prompts",
+        "llm",
         "agent-skills",
         "anti-bloat"
       ],

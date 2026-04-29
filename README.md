@@ -1,9 +1,13 @@
 # prompt-refiner-skill
 
-> The anti-bloat prompt refiner for Claude Code. Lightly refines your prompt — clearer, more precise, better structured — then runs it. Without rewriting it into a framework template you didn't ask for.
+> Flags prompt-engineering bugs in your prompt against a stable rule catalog. **Lint, don't rewrite.** No framework imposition. No interview flow. No language switching.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Anti-bloat](https://img.shields.io/badge/anti--bloat-strict-ff7a59)](references/lint-rules.md)
+[![No frameworks](https://img.shields.io/badge/frameworks-none-0b1020)](#what-it-does-and-doesnt)
+[![Lint, don't rewrite](https://img.shields.io/badge/mode-lint--only-ffd166)](references/lint-rules.md)
+[![Conformance](https://img.shields.io/badge/conformance-bash-2a3358)](scripts/run-tests.sh)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-skill-d97757)](https://claude.com/claude-code)
 [![CI](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml)
 
@@ -11,26 +15,30 @@
 
 ## Contents
 
-- [Why this skill exists](#why-this-skill-exists)
+- [What it does (and doesn't)](#what-it-does-and-doesnt)
 - [Install](#install)
-- [Usage](#usage) — incl. [intensity modes](#intensity-modes)
-- [Example](#example) (more in [`examples/`](examples/))
+- [Usage](#usage)
+- [Example](#example)
 - [When NOT to use this skill](#when-not-to-use-this-skill)
-- [Behavior guarantees](#behavior-guarantees)
-- [FAQ](#faq)
-- [Use it outside Claude Code](#use-it-outside-claude-code)
+- [How it compares to framework-based prompt tools](#how-it-compares-to-framework-based-prompt-tools)
+- [CI integration](#ci-integration)
+- [Cost & footprint](#cost--footprint)
+- [Star history](#star-history)
 - [Contributing](#contributing)
 - [License & changelog](#license--changelog)
 
 ---
 
-## Why this skill exists
+## What it does (and doesn't)
 
-Most "prompt improvers" are maximalists — you give them `"write a tweet"` and they hand back a 30-line CO-STAR template with `CONTEXT:`, `OBJECTIVE:`, `STYLE:`, `TONE:`, `AUDIENCE:`, `RESPONSE FORMAT:`. That's great when you're writing a prompt from scratch. It's the wrong tool for refining a prompt you already wrote.
+This skill **flags** prompt-engineering bugs against a stable, citeable rule catalog ([`references/lint-rules.md`](references/lint-rules.md)). It does **not** rewrite your prompt, does **not** ask clarifying questions, and does **not** impose a framework. You stay in control of the words; the skill points at the bugs.
 
-`prompt-refiner` does the opposite. It takes your prompt, sharpens it just enough — fixes the typos, removes the ambiguity, tightens the structure — and runs it. It will not insert a framework. It will not change your language from German to English. It will not invent an audience or a tone you never specified.
+Output is Markdown by default. Append `--json` (or ask for "JSON output") to get a report that validates against [`schemas/report.schema.json`](schemas/report.schema.json).
 
-If your prompt is already clear, the "improved" version is nearly identical to the original. That is correct behavior, not a bug.
+The catalog ships 13 rules across two families:
+
+- **Clarity & specificity** — `PR001` vague verb, `PR002` mixed intent, `PR003` ambiguous pronoun, `PR004` scale conflict, `PR005` contradictory constraints, `PR006` unbounded numeric, `PR007` implicit format, `PR008` placeholder leakage, `PR009` conflicting persona, `PR010` untestable success criterion.
+- **Prompt injection / role confusion** — `PR-INJ01` "ignore previous" pattern, `PR-INJ02` post-input role switch, `PR-INJ03` unbounded tool authority.
 
 ## Install
 
@@ -59,97 +67,81 @@ cp -r /tmp/prompt-refiner-skill/skills/prompt-refiner ~/.claude/skills/
 
 ## Usage
 
-Invoke the skill any of these ways:
+Invoke the skill with any of these phrasings — auto-routing picks it up via the trigger keywords in `SKILL.md`:
 
-- *"Use the prompt-refiner skill on this: &lt;your prompt&gt;"*
-- *"Refine this prompt and run it: &lt;your prompt&gt;"*
-- `/prompt-refiner &lt;your prompt&gt;` (if your harness exposes skills as slash commands)
+- *"Lint this prompt: \<your prompt\>"*
+- *"Review my prompt for bugs: \<your prompt\>"*
+- *"Audit prompt: \<your prompt\>"*
+- Append `--json` for machine-readable output: *"lint --json: \<your prompt\>"*
 
-### Intensity modes
-
-| Mode | When to use | Word-count budget |
-|------|-------------|-------------------|
-| `light` (default) | Most prompts. Refines for clarity, precision, structure. | ±30 % of original |
-| `strict` | When you trust your prompt and only want typos / true bugs fixed. | ±10 % of original |
-| `review` | When you want to *see* the refined version without running it. | n/a |
-
-Append the flag to your invocation, e.g. *"refine this prompt --strict: &lt;your prompt&gt;"*.
+The skill reads your prompt, applies the [rule catalog](references/lint-rules.md), and emits a Markdown report (or JSON, with `--json`) — one finding per rule that fired, with line:col citations and quoted evidence.
 
 ## Example
 
-**Original prompt:**
+**Prompt:**
 
-> mach mir ne liste mit ideen für nen blog post über ai
+> Handle the customer feedback we got last week and write a tweet about it.
 
 **Skill output:**
 
 ```markdown
-## Improved prompt
-Erstelle eine Liste mit konkreten Ideen für einen Blog-Post über KI.
+# Prompt-refiner report
 
-## Result
-- "10 KI-Tools, die ich im Alltag wirklich benutze"
-- "Was ChatGPT immer noch nicht kann — und warum"
-- "Wie ich mit Claude Code in einer Woche eine App gebaut habe"
-- "Prompt-Engineering für Nicht-Entwickler: ein Mini-Leitfaden"
-- "Warum lokale Modelle 2026 endlich gut genug sind"
+`PR001` [warning] 1:1 — `Handle` — vague action verb; name the transformation (e.g. classify, summarize).
+`PR002` [error] 1:1 — `Handle ... and write a tweet ...` — two distinct intents in one instruction; split into separate steps.
+`PR003` [warning] 1:60 — `it` — ambiguous antecedent (feedback or tweet?).
+
+**summary:** 1 error, 2 warnings, 0 info
 ```
 
-Notice what *didn't* happen: language wasn't switched to English, no `CONTEXT:` / `AUDIENCE:` / `TONE:` scaffolding, no clarifying questions about word count or target reader.
-
-See [`examples/`](examples/) for four more before/after pairs, including `--strict` and `--review` mode walkthroughs.
+The skill quotes literal evidence, cites the rule by ID, and stops. It does not propose a rewrite — that decision stays with you.
 
 ## When NOT to use this skill
 
-Use a different tool when:
+- **You're writing a brand-new prompt from scratch.** Reach for a framework-based skill instead — for example [`prompt-architect`](https://github.com/ckelsoe/prompt-architect) (27 frameworks: CO-STAR, RISEN, RTF, RACE, …). It's the right shape for "I have an idea, help me prompt it well."
+- **You want the AI to rewrite the prompt for you.** This skill flags; it does not author. Copy the rule rationale and edit by hand, or use a framework-based refiner for a rewrite.
+- **You want the AI to interview you.** This skill is silent until it has a prompt to lint.
 
-- **You're writing a brand-new prompt from scratch and want a structured template.** Reach for a framework-based skill instead — for example [`prompt-architect`](https://github.com/ckelsoe/prompt-architect) (27 frameworks: CO-STAR, RISEN, RTF, RACE, …). It's the right shape for "I have an idea, help me prompt it well."
-- **You want the AI to interview you** before producing a prompt. That's also a job for framework-based skills with progressive-disclosure dialogue.
-- **You want a different output every time.** This skill is deterministic in spirit — same prompt + same intensity → essentially the same refinement.
+## How it compares to framework-based prompt tools
 
-`prompt-refiner` is for when the prompt is *already there* and you want it sharpened, not reimagined.
+| | `prompt-refiner` (this skill) | Framework refiners (e.g. [`prompt-architect`](https://github.com/ckelsoe/prompt-architect), CO-STAR / RISEN / RTF builders) |
+|---|---|---|
+| **Best for** | Auditing a prompt you already wrote | Authoring a new prompt from scratch |
+| **Output** | Lint report (rule citations + evidence) | A rewritten prompt, often 5–10× longer |
+| **Frameworks (CO-STAR / RISEN / RTF / RACE)** | Never imposed — explicitly forbidden | Core feature |
+| **Language handling** | Preserves original (DE → DE, JP → JP, mixed → mixed) | Often switches to English |
+| **Clarifying questions** | Almost never | Often (interview-style) |
+| **Output shape** | Markdown lint report or JSON (`--json`) | Variable, framework-shaped |
+| **Behavior on a clean prompt** | Reports zero findings | Still imposes structure |
 
-## Behavior guarantees
+These tools complement each other: use `prompt-architect` to **write** a prompt, `prompt-refiner` to **audit** it before you ship.
 
-The skill enforces these rules on every invocation:
+## CI integration
 
-- **No scope drift** — won't add features, requirements, or constraints you didn't ask for.
-- **No framework imposition** — never inserts CO-STAR / RISEN / RTF / RACE-style scaffolding.
-- **Language preserved** — replies in the language of the original prompt (DE stays DE, EN stays EN, mixed stays mixed).
-- **Tone preserved** — casual stays casual, formal stays formal, terse stays terse.
-- **Length budgeted** — `light` ≤ ±30 %, `strict` ≤ ±10 % of original word count.
-- **No unnecessary questions** — only asks when the task is genuinely impossible without clarification.
-- **Fixed output shape** — always exactly `## Improved prompt` followed by `## Result`, in that order, with nothing else around them.
+Drop-in recipes for invoking the skill from your own pipeline:
 
-## FAQ
+- [`recipes/pre-commit.md`](recipes/pre-commit.md) — block commits with `error`-severity findings.
+- [`recipes/github-action.md`](recipes/github-action.md) — comment the report on every PR that touches `*.prompt.md`.
 
-**Will this skill make my prompt much longer?**
-No. By design, light mode stays within ±30 % of your original word count and strict mode within ±10 %. If your prompt was 7 words, the refined version will be roughly 7 words.
+## Cost & footprint
 
-**Why no clarifying questions?**
-Because most clarifying questions are unnecessary friction — the AI can usually make a reasonable assumption. Reserve questions for the rare case where the task is genuinely impossible without an answer.
+The skill loads the lint catalog plus frontmatter on activation (≈ a few KB of Markdown). It calls no external APIs, ships no binaries, and adds no runtime dependencies beyond a POSIX shell. The conformance suite ([`scripts/run-tests.sh`](scripts/run-tests.sh)) finishes in under one second on the shipped corpus; see [`scripts/bench.sh`](scripts/bench.sh) to reproduce.
 
-**Why no framework (CO-STAR / RISEN / RTF)?**
-Because frameworks are for *writing new prompts*, not for *refining ones you already wrote*. Forcing a framework onto an existing prompt smuggles in scope you didn't ask for: an audience, a tone, a response format, a structure. If you want a framework, use a framework-based skill — see [When NOT to use this skill](#when-not-to-use-this-skill).
+## Star history
 
-**My prompt was already clear and the skill barely changed it. Is that a bug?**
-No, that's the correct behavior. Returning your prompt verbatim when there's nothing to fix is one of the skill's hard rules.
+[![Star History Chart](https://api.star-history.com/svg?repos=HenrikBrehm/prompt-refiner-skill&type=Date)](https://star-history.com/#HenrikBrehm/prompt-refiner-skill&Date)
 
-**Can I use this with Cursor / ChatGPT / Windsurf?**
-Yes. See [`adapters/system-prompt.md`](adapters/system-prompt.md) — a portable system prompt that reproduces the skill's behavior in any tool with a custom-instructions field.
-
-**How do I report a misbehavior?**
-Open a [bug report](.github/ISSUE_TEMPLATE/bug_report.md) — the template asks for the original prompt, the intensity flag, and which behavior guarantee was violated.
-
-## Use it outside Claude Code
-
-For Cursor, Windsurf, ChatGPT, Gemini, Copilot Chat, and similar tools, paste [`adapters/system-prompt.md`](adapters/system-prompt.md) into the tool's system-prompt / custom-instructions field. The behavior matches the Claude Code skill, modulo features that depend on Claude Code's native skill harness.
+If this skill saves you from prompt-bloat, a star is the cheapest way to help others find it.
 
 ## Contributing
 
-PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The bar is high: each change should make the skill *more reliable* or *more discoverable* without bloating it. Behavior assertions live in [`tests/spec.md`](tests/spec.md); structural validation is in [`scripts/validate-skill.sh`](scripts/validate-skill.sh) and runs on every push and PR via GitHub Actions.
+PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The bar is high: each change should make the skill *more reliable* or *more discoverable* without bloating it. Structural validation lives in [`scripts/validate-skill.sh`](scripts/validate-skill.sh) and runs on every push and PR via GitHub Actions; conformance lives in [`scripts/run-tests.sh`](scripts/run-tests.sh) and [`tests/corpus/`](tests/corpus/).
 
 ## License & changelog
 
 - License: [MIT](LICENSE) © 2026 Henrik Brehm
 - Release notes: [CHANGELOG.md](CHANGELOG.md)
+
+---
+
+![og card](assets/og-card.svg)

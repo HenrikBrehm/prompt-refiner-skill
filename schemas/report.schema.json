@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/HenrikBrehm/prompt-refiner-skill/blob/main/schemas/report.schema.json",
+  "title": "PromptRefinerReport",
+  "type": "object",
+  "required": ["skill", "version", "input_chars", "findings", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "skill": { "type": "string", "const": "prompt-refiner-skill" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "input_chars": { "type": "integer", "minimum": 0 },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "severity", "line", "col", "evidence", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": { "type": "string", "pattern": "^PR(-INJ)?[0-9]{2,3}$" },
+          "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+          "line": { "type": "integer", "minimum": 1 },
+          "col": { "type": "integer", "minimum": 1 },
+          "evidence": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["error", "warning", "info"],
+      "additionalProperties": false,
+      "properties": {
+        "error": { "type": "integer", "minimum": 0 },
+        "warning": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

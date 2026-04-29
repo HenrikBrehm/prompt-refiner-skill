@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="prompt-refiner-skill — flags prompt-engineering bugs without rewriting">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1020"/>
+      <stop offset="100%" stop-color="#1a1f3a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff7a59"/>
+      <stop offset="100%" stop-color="#ffd166"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" fill="#e6edf3">
+    <text x="80" y="140" font-size="36" fill="#9aa4b2">github.com/HenrikBrehm</text>
+    <text x="80" y="230" font-size="84" font-weight="700">prompt-refiner-skill</text>
+    <rect x="80" y="260" width="220" height="6" fill="url(#accent)"/>
+    <text x="80" y="340" font-size="40" fill="#e6edf3">Flags prompt bugs.</text>
+    <text x="80" y="392" font-size="40" fill="#e6edf3">Never rewrites.</text>
+    <text x="80" y="444" font-size="40" fill="#e6edf3">No framework. No interview.</text>
+    <g font-size="22" fill="#9aa4b2">
+      <text x="80" y="540">PR001 vague-verb &#160; PR002 mixed-intent &#160; PR003 pronoun-ambiguity</text>
+      <text x="80" y="572">PR004 scale-conflict &#160; PR005 contradiction &#160; PR-INJ01 ignore-previous</text>
+    </g>
+  </g>
+  <g transform="translate(880,260)" font-family="ui-monospace, monospace" font-size="22" fill="#e6edf3">
+    <rect x="-20" y="-40" width="340" height="280" rx="14" fill="#0f1530" stroke="#2a3358" stroke-width="2"/>
+    <text x="0" y="0" fill="#ff7a59">$ claude --skill prompt-refiner</text>
+    <text x="0" y="36" fill="#9aa4b2">&#8250; Handle the customer feedback.</text>
+    <text x="0" y="80" fill="#ffd166">PR001 [warning] 1:1</text>
+    <text x="0" y="110" fill="#e6edf3">  vague action verb</text>
+    <text x="0" y="150" fill="#ffd166">PR007 [warning] 1:8</text>
+    <text x="0" y="180" fill="#e6edf3">  output format unspecified</text>
+    <text x="0" y="220" fill="#9aa4b2">summary: 0 errors, 2 warnings</text>
+  </g>
+</svg>
