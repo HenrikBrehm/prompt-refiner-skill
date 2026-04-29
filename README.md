@@ -3,8 +3,24 @@
 > The anti-bloat prompt refiner for Claude Code. Lightly refines your prompt — clearer, more precise, better structured — then runs it. Without rewriting it into a framework template you didn't ask for.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-skill-d97757)](https://claude.com/claude-code)
+[![CI](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml)
+
+---
+
+## Contents
+
+- [Why this skill exists](#why-this-skill-exists)
+- [Install](#install)
+- [Usage](#usage) — incl. [intensity modes](#intensity-modes)
+- [Example](#example) (more in [`examples/`](examples/))
+- [When NOT to use this skill](#when-not-to-use-this-skill)
+- [Behavior guarantees](#behavior-guarantees)
+- [FAQ](#faq)
+- [Use it outside Claude Code](#use-it-outside-claude-code)
+- [Contributing](#contributing)
+- [License & changelog](#license--changelog)
 
 ---
 
@@ -104,6 +120,34 @@ The skill enforces these rules on every invocation:
 - **Length budgeted** — `light` ≤ ±30 %, `strict` ≤ ±10 % of original word count.
 - **No unnecessary questions** — only asks when the task is genuinely impossible without clarification.
 - **Fixed output shape** — always exactly `## Improved prompt` followed by `## Result`, in that order, with nothing else around them.
+
+## FAQ
+
+**Will this skill make my prompt much longer?**
+No. By design, light mode stays within ±30 % of your original word count and strict mode within ±10 %. If your prompt was 7 words, the refined version will be roughly 7 words.
+
+**Why no clarifying questions?**
+Because most clarifying questions are unnecessary friction — the AI can usually make a reasonable assumption. Reserve questions for the rare case where the task is genuinely impossible without an answer.
+
+**Why no framework (CO-STAR / RISEN / RTF)?**
+Because frameworks are for *writing new prompts*, not for *refining ones you already wrote*. Forcing a framework onto an existing prompt smuggles in scope you didn't ask for: an audience, a tone, a response format, a structure. If you want a framework, use a framework-based skill — see [When NOT to use this skill](#when-not-to-use-this-skill).
+
+**My prompt was already clear and the skill barely changed it. Is that a bug?**
+No, that's the correct behavior. Returning your prompt verbatim when there's nothing to fix is one of the skill's hard rules.
+
+**Can I use this with Cursor / ChatGPT / Windsurf?**
+Yes. See [`adapters/system-prompt.md`](adapters/system-prompt.md) — a portable system prompt that reproduces the skill's behavior in any tool with a custom-instructions field.
+
+**How do I report a misbehavior?**
+Open a [bug report](.github/ISSUE_TEMPLATE/bug_report.md) — the template asks for the original prompt, the intensity flag, and which behavior guarantee was violated.
+
+## Use it outside Claude Code
+
+For Cursor, Windsurf, ChatGPT, Gemini, Copilot Chat, and similar tools, paste [`adapters/system-prompt.md`](adapters/system-prompt.md) into the tool's system-prompt / custom-instructions field. The behavior matches the Claude Code skill, modulo features that depend on Claude Code's native skill harness.
+
+## Contributing
+
+PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The bar is high: each change should make the skill *more reliable* or *more discoverable* without bloating it. Behavior assertions live in [`tests/spec.md`](tests/spec.md); structural validation is in [`scripts/validate-skill.sh`](scripts/validate-skill.sh) and runs on every push and PR via GitHub Actions.
 
 ## License & changelog
 

@@ -4,7 +4,7 @@ description: Lightly refines the user's prompt before executing it — clearer, 
 license: MIT
 metadata:
   author: Henrik Brehm
-  version: "1.0.0"
+  version: "1.1.0"
   homepage: https://github.com/HenrikBrehm/prompt-refiner-skill
 ---
 

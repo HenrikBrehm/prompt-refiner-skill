@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.1.0] - 2026-04-29
+
+Polish pass: tooling, scaffolding, and portability — no skill-behavior changes.
+
+### Added
+- CI: `.github/workflows/validate.yml` runs `scripts/validate-skill.sh` on every push and PR.
+- Validator: `scripts/validate-skill.sh` lints `plugin.json`, `marketplace.json`, `SKILL.md` (frontmatter + required output sections), `CHANGELOG.md` (version entry present), and `examples/` (non-empty).
+- Behavior spec: `tests/spec.md` — 9-item invariant catalog for manual / AI verification.
+- System-prompt adapter: `adapters/system-prompt.md` — portable rules for Cursor, Windsurf, ChatGPT, Gemini, Copilot Chat.
+- Contribution scaffolding: `CONTRIBUTING.md`, issue templates (`bug_report.md`, `feature_request.md`, `config.yml`), pull request template.
+- Repo hygiene: `.gitattributes` (LF normalization), `.editorconfig` (charset, indent, EOL).
+- README enhancements: contents/TOC, FAQ, "Use it outside Claude Code" section, CI badge, contributing pointer.
+
+### Changed
+- README structure tightened around the new sections; no information removed.
+
+---
+
 ## [1.0.0] - 2026-04-29
 
 First public release.

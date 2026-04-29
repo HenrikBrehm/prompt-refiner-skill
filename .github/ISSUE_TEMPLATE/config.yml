@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the docs first
+    url: https://github.com/HenrikBrehm/prompt-refiner-skill#readme
+    about: README, examples, and behavior guarantees — please skim before opening an issue.
+  - name: Looking for a framework-based refiner?
+    url: https://github.com/ckelsoe/prompt-architect
+    about: Try prompt-architect — 27 frameworks for writing new prompts from scratch. This skill is the anti-framework refiner.

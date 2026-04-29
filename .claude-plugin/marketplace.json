@@ -12,7 +12,7 @@
       "name": "prompt-refiner",
       "source": "./",
       "description": "Lightly refines a user's prompt before executing it — clearer, more precise, better structured — without changing intent, tone, scope, or language. Three intensity modes: light (default), strict, review.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "prompt-engineering",
         "prompt-refinement",
