@@ -34,7 +34,7 @@
 
 This skill **flags** prompt-engineering bugs against a stable, citeable rule catalog ([`references/lint-rules.md`](references/lint-rules.md)). It does **not** rewrite your prompt, does **not** ask clarifying questions, and does **not** impose a framework. You stay in control of the words; the skill points at the bugs.
 
-Output is Markdown by default. Append `--json` (or ask for "JSON output") to get a report that validates against [`schemas/report.schema.json`](schemas/report.schema.json).
+Output is Markdown by default. Append `--json` (or ask for "JSON output") to get a report that validates against [`schemas/report.schema.json`](schemas/report.schema.json). Every finding is tagged with the engine that produced it.
 
 The catalog ships 20 rules across three families:
 
@@ -73,6 +73,8 @@ mkdir -p .claude/skills
 cp -r /tmp/prompt-refiner-skill/skills/prompt-refiner .claude/skills/
 ```
 
+The copied `skills/prompt-refiner/` directory is self-contained: it includes `SKILL.md`, the deterministic detector, the rule catalog, JSON schema, and CI recipes.
+
 ### Option 3 — Manual copy (user-level, all projects)
 
 ```bash
@@ -90,7 +92,7 @@ Invoke the skill with any of these phrasings — auto-routing picks it up via th
 - *"Audit prompt: \<your prompt\>"*
 - Append `--json` for machine-readable output: *"lint --json: \<your prompt\>"*
 
-The skill reads your prompt, applies the [rule catalog](references/lint-rules.md), and emits a Markdown report (or JSON, with `--json`) — one finding per rule that fired, with line:col citations and quoted evidence.
+The skill reads your prompt, applies the [rule catalog](references/lint-rules.md), and emits a Markdown report (or JSON, with `--json`) — one finding per rule that fired, with line:col citations, quoted evidence, and engine tags.
 
 ## Example
 
@@ -103,9 +105,9 @@ The skill reads your prompt, applies the [rule catalog](references/lint-rules.md
 ```markdown
 # Prompt-refiner report
 
-`PR001` [warning] 1:1 — `Handle` — vague action verb; name the transformation (e.g. classify, summarize).
-`PR002` [error] 1:1 — `Handle ... and write a tweet ...` — two distinct intents in one instruction; split into separate steps.
-`PR003` [warning] 1:60 — `it` — ambiguous antecedent (feedback or tweet?).
+`PR001` [warning] 1:1 - `Handle` - vague action verb; name the transformation (e.g. classify, summarize). _(deterministic)_
+`PR002` [error] 1:1 - `Handle ... and write a tweet ...` - two distinct intents in one instruction; split into separate steps. _(deterministic)_
+`PR003` [warning] 1:60 - `it` - ambiguous antecedent (feedback or tweet?). _(model)_
 
 **summary:** 1 error, 2 warnings, 0 info
 ```
@@ -159,7 +161,7 @@ Drop-in recipes:
 
 ## Cost & footprint
 
-The skill loads the lint catalog plus frontmatter on activation (≈ a few KB of Markdown). The deterministic detector ([`scripts/lint.js`](scripts/lint.js)) is a single ~500-line Node file with **zero npm dependencies** — only the Node stdlib. It calls no external APIs and ships no binaries. The conformance suite ([`scripts/run-tests.sh`](scripts/run-tests.sh)) runs all 17 corpus cases in under a second; see [`scripts/bench.sh`](scripts/bench.sh) to reproduce.
+The skill loads the lint catalog plus frontmatter on activation (≈ a few KB of Markdown). The deterministic detector ([`scripts/lint.js`](scripts/lint.js)) is a single zero-dependency Node file using only the Node stdlib. It calls no external APIs and ships no binaries. The conformance suite ([`scripts/run-tests.sh`](scripts/run-tests.sh)) runs all 25 corpus cases in under a second; see [`scripts/bench.sh`](scripts/bench.sh) to reproduce.
 
 ## Star history
 

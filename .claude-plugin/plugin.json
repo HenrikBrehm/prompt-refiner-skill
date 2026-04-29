@@ -1,6 +1,6 @@
 {
   "name": "prompt-refiner",
-  "description": "Hybrid prompt linter — deterministic Node detector for 18 of 20 rules (PR001, PR002, PR004–PR008, PR010–PR017, PR-INJ01–03), LLM model layer only for PR003 (pronoun antecedent) and PR009 (conflicting persona). Lint, don't rewrite. Markdown or JSON output, suppression comments, baseline mode, conformance corpus (25 cases), CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
+  "description": "Hybrid prompt linter — deterministic Node detector for 18 of 20 rules plus an LLM model layer for PR003, PR009, and semantic cases of PR002, PR005, and PR010. Lint, don't rewrite. Markdown or JSON output, suppression comments, baseline mode, conformance corpus (25 cases), CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
   "version": "1.4.0",
   "author": {
     "name": "Henrik Brehm",

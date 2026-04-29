@@ -67,8 +67,8 @@ check_marketplace_json() {
   ok "$f"
 }
 
-# 3. SKILL.md — has frontmatter with name+description, and body references the
-#    fixed two-section output format.
+# 3. SKILL.md - has frontmatter with routing fields and references bundled
+#    resources through CLAUDE_SKILL_DIR.
 check_skill_md() {
   local f=skills/prompt-refiner/SKILL.md
   if [ ! -f "$f" ]; then err "$f missing"; return; fi
@@ -76,16 +76,29 @@ check_skill_md() {
     err "$f does not start with YAML frontmatter (---)"
     return
   fi
-  for k in name description; do
+  for k in name description when_to_use; do
     if ! grep -E "^${k}:" "$f" >/dev/null; then
       err "$f frontmatter missing required field: $k"
     fi
   done
-  if ! grep -F 'references/lint-rules.md' "$f" >/dev/null; then
-    err "$f body must reference references/lint-rules.md"
+  if ! grep -F '${CLAUDE_SKILL_DIR}/references/lint-rules.md' "$f" >/dev/null; then
+    err "$f body must reference bundled references/lint-rules.md via CLAUDE_SKILL_DIR"
   fi
-  if ! grep -F '## Use when' "$f" >/dev/null; then
-    err "$f body must have a '## Use when' routing section"
+  if ! grep -F '${CLAUDE_SKILL_DIR}/scripts/lint.js' "$f" >/dev/null; then
+    err "$f body must reference bundled scripts/lint.js via CLAUDE_SKILL_DIR"
+  fi
+  for bundled in \
+    skills/prompt-refiner/scripts/lint.js \
+    skills/prompt-refiner/references/lint-rules.md \
+    skills/prompt-refiner/references/json-output.md \
+    skills/prompt-refiner/schemas/report.schema.json
+  do
+    if [ ! -f "$bundled" ]; then
+      err "$bundled missing from deployable skill folder"
+    fi
+  done
+  if ! grep -F '"engine"' schemas/report.schema.json >/dev/null; then
+    err "schemas/report.schema.json must include engine on findings"
   fi
   ok "$f"
 }

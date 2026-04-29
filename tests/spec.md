@@ -2,7 +2,7 @@
 
 A catalog of invariants the linter must satisfy. Use these when reviewing a behavior change or when manually verifying that a Claude Code session is invoking the skill correctly. Each spec is structured as **input → must-hold properties**.
 
-Structural pieces (frontmatter present, `references/lint-rules.md` referenced, `## Use when` section present) are checked automatically by `scripts/validate-skill.sh`. Corpus structure is checked by `scripts/run-tests.sh`. The semantic pieces below cannot be checked statically — they require running the skill and inspecting output.
+Structural pieces (frontmatter present, `when_to_use` present, bundled resources referenced through `${CLAUDE_SKILL_DIR}`) are checked automatically by `scripts/validate-skill.sh`. Corpus structure is checked by `scripts/run-tests.sh`. The semantic pieces below cannot be checked statically — they require running the skill and inspecting output.
 
 ---
 
@@ -46,7 +46,7 @@ Structural pieces (frontmatter present, `references/lint-rules.md` referenced, `
 
 **Must hold:**
 - Response begins with the literal heading `# Prompt-refiner report` (no preamble before it).
-- One line per finding, format: `` `<RULE_ID>` [<severity>] line:col — `<evidence>` — <one-line rationale> ``
+- One line per finding, format: `` `<RULE_ID>` [<severity>] line:col - `<evidence>` - <one-line rationale> _(<engine>)_ ``
 - A `**summary:**` totals line follows (or the literal block `No issues found.` if zero findings).
 - No closing meta-commentary after the totals line.
 
@@ -58,6 +58,7 @@ Structural pieces (frontmatter present, `references/lint-rules.md` referenced, `
 - Response is exactly one fenced ` ```json ` block — nothing before or after.
 - Content validates against `schemas/report.schema.json`.
 - `findings` array is ordered by `line`, then `col`.
+- Every finding contains `engine` with value `deterministic` or `model`.
 - No suggested rewrites anywhere in the JSON.
 
 ## S-7. Zero-finding behavior
