@@ -11,8 +11,8 @@
     {
       "name": "prompt-refiner",
       "source": "./",
-      "description": "Hybrid prompt linter — deterministic Node detector for 8 of 13 rules, LLM model layer for the semantic rest. Lint, don't rewrite. Markdown or JSON output, suppression comments, baseline mode, conformance corpus (17 cases), CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
-      "version": "1.3.0",
+      "description": "Hybrid prompt linter — deterministic Node detector for 18 of 20 rules, LLM model layer only for the 2 truly-semantic rules (pronoun antecedent, persona conflict). Lint, don't rewrite. Markdown or JSON output, suppression comments, baseline mode, conformance corpus (25 cases), CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
+      "version": "1.4.0",
       "keywords": [
         "claude-code",
         "claude-skill",

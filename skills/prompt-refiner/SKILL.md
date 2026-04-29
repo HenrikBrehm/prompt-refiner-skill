@@ -1,10 +1,10 @@
 ---
 name: prompt-refiner
-description: Flags prompt-engineering bugs in user-supplied prompts without rewriting them. Use when the user says "lint my prompt", "review this prompt", "improve this prompt", "what's wrong with my prompt", "audit prompt", "check prompt for bugs", or pastes a prompt and asks for feedback. Reports findings as line-numbered citations against the rule catalog in references/lint-rules.md. Hybrid engine: a deterministic Node detector (scripts/lint.js) covers 8 of 13 rules with reproducible output; the model layers semantic rules on top. Never imposes a framework, never asks clarifying questions, never auto-rewrites.
+description: Flags prompt-engineering bugs in user-supplied prompts without rewriting them. Use when the user says "lint my prompt", "review this prompt", "improve this prompt", "what's wrong with my prompt", "audit prompt", "check prompt for bugs", or pastes a prompt and asks for feedback. Reports findings as line-numbered citations against the rule catalog in references/lint-rules.md. Hybrid engine: a deterministic Node detector (scripts/lint.js) covers 18 of 20 rules with reproducible output; the model layers semantic rules on top. Never imposes a framework, never asks clarifying questions, never auto-rewrites.
 license: MIT
 metadata:
   author: Henrik Brehm
-  version: "1.3.0"
+  version: "1.4.0"
   homepage: https://github.com/HenrikBrehm/prompt-refiner-skill
 ---
 
@@ -13,8 +13,8 @@ metadata:
 This skill **flags** prompt-engineering bugs against a stable, citeable rule catalog. It does NOT rewrite the user's prompt, does NOT ask clarifying questions, and does NOT impose any framework (CO-STAR / RISEN / RTF / RACE).
 
 It runs a hybrid two-pass:
-- **Deterministic pass** — `scripts/lint.js` (zero-dep Node) catches `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03`. Same input → same findings, run-to-run.
-- **Model pass** — you (the model) layer the semantic rules on top: `PR002`, `PR003`, `PR005`, `PR009`, `PR010`. These need intent classification, antecedent resolution, persona/domain comparison, or judgement on testability.
+- **Deterministic pass** — `scripts/lint.js` (zero-dep Node) catches the basic case for **18 of 20 rules**: pure-deterministic `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR011`, `PR012`, `PR013`, `PR014`, `PR015`, `PR016`, `PR017`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03`, plus the deterministic-basic-case for hybrid `PR002`, `PR005`, `PR010`. Same input → same findings, run-to-run.
+- **Model pass** — you (the model) layer two pure-semantic rules on top: `PR003` (pronoun antecedent resolution), `PR009` (persona/domain comparison). For the three hybrid rules (`PR002`, `PR005`, `PR010`), add semantic findings the regex missed.
 
 ## Use when
 
@@ -54,7 +54,9 @@ If `node` is unavailable in the environment, skip this step and add a one-line f
 
 ### 4. Run the model pass
 
-Read `references/lint-rules.md` and check the rules whose `Engine:` line is `model` (`PR002`, `PR003`, `PR005`, `PR009`, `PR010`) against the prompt. Each rule's "Detect" clause defines what triggers a finding. Record findings as `{rule_id, severity, line, col, evidence, rationale, engine: "model"}`.
+Read `references/lint-rules.md` and check the rules whose `Engine:` line contains `model` against the prompt. That covers two pure-model rules (`PR003`, `PR009`) and three hybrid rules where you add semantic cases on top of the deterministic basic case (`PR002`, `PR005`, `PR010`). Each rule's "Detect" clause defines what triggers a finding. Record findings as `{rule_id, severity, line, col, evidence, rationale, engine: "model"}`.
+
+For the three hybrid rules, do NOT re-emit a finding the deterministic pass already produced (deduplicate by `(rule_id, line, evidence)`); only add semantic cases the regex missed.
 
 Stability contract for model findings:
 - `evidence` is the literal substring quoted from the prompt — never paraphrased, never translated.

@@ -14,7 +14,12 @@ Engine: each rule below carries an `Engine:` line.
 - `model` — fired by the LLM during the skill's procedure (semantic analysis required; not reproducible run-to-run).
 - `hybrid` — basic cases caught deterministically; semantic cases caught by the model.
 
-Rules currently detected deterministically: `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03`. The remaining rules (`PR002`, `PR003`, `PR005`, `PR009`, `PR010`) require the model layer.
+Rules currently detected by the deterministic engine:
+- **Pure deterministic** (no model overlap): `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR011`, `PR012`, `PR013`, `PR014`, `PR015`, `PR016`, `PR017`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03`.
+- **Hybrid** (deterministic basic case + model semantic case): `PR002`, `PR005`, `PR010`.
+- **Pure model** (no reliable regex possible): `PR003` (antecedent resolution), `PR009` (persona/domain comparison).
+
+Run-to-run drift on the model layer is bounded to `PR003` and `PR009`. Everything else is reproducible against fixed input.
 
 ## Clarity & specificity
 
@@ -30,9 +35,10 @@ Note: `do` is intentionally excluded from the EN verb list — too overloaded (`
 
 ### PR002 — Mixed intent in single instruction
 Severity: error
-Engine: model (requires intent classification across imperatives)
+Engine: hybrid (deterministic basic case via known imperative-verb vocabulary; model handles semantic cases the regex misses)
 Detect: a single sentence containing two or more top-level imperatives joined by `and`/`then`/`,` where the imperatives target different output artefacts (e.g. `summarize X and write a tweet about Y`).
 Flag: quote the sentence; list the distinct intents detected; recommend splitting into separately scoped steps or a numbered list. Do NOT propose specific wording.
+Deterministic note: matches when two distinct imperatives from a known vocabulary (write/summarize/classify/translate/extract/...) appear in one sentence joined by and/then. Different verb stems are required so `summarize and refine` is not flagged.
 
 ### PR003 — Pronoun with ambiguous antecedent
 Severity: warning
@@ -48,9 +54,10 @@ Flag: quote both constraints; mark which budget unit they disagree on (length, s
 
 ### PR005 — Contradictory constraints
 Severity: error
-Engine: model (semantic equivalence check on `X` across both clauses)
+Engine: hybrid (deterministic catches a curated list of known contradiction pairs within one paragraph; model catches the rest via semantic equivalence)
 Detect: a `do X` adjacent to a `do not X` for the same X within one prompt; or a positive instruction whose required output violates a stated prohibition (e.g. `output JSON` + `do not include curly braces`).
 Flag: quote both clauses; do NOT propose a resolution.
+Deterministic pairs include: JSON ↔ no braces / plain text only; formal tone ↔ casual tone; bullet points ↔ prose-only; markdown ↔ plain text only; code-only ↔ explain; English-only ↔ another named language. The model layer adds semantic contradictions outside this list.
 
 ### PR006 — Unbounded numeric request
 Severity: warning
@@ -78,9 +85,61 @@ Flag: quote both clauses.
 
 ### PR010 — Untestable success criterion
 Severity: info
-Engine: model (judgement on whether the criterion is operationally testable)
+Engine: hybrid (deterministic flags vague-quality adjectives in instructional context; model judges whether an adjacent operational definition redeems the phrase)
 Detect: a success phrase (`good`, `high quality`, `useful`, `clear`, `engaging`, `professional`) without an operational definition (rubric, example, comparable artefact, automated check).
 Flag: quote the phrase; recommend either deletion or attaching one operational criterion.
+Deterministic basic case: a vague-quality adjective (good/great/professional/engaging/high-quality/...) sandwiched between an instructional verb (write/make/create/...) and an output noun (response/article/email/...). The model layer handles cases where the criterion appears in adjacent prose.
+
+## Output hygiene & ergonomics
+
+### PR011 — Stale or unanchored relative date
+Severity: warning
+Engine: deterministic (relative-date phrase + no absolute date elsewhere in prompt)
+Detect: a relative date reference (`yesterday`, `today`, `last week`, `this quarter`, `most recent`, `latest`, `up-to-date`, etc.) when the prompt contains no absolute date (ISO `YYYY-MM-DD`, slashed `M/D/YYYY`, named-month with day, or `Q<n> YYYY`).
+Flag: quote the relative phrase; recommend attaching the absolute date so the model does not have to guess from training-data cutoff.
+Why it matters: models cannot resolve relative dates without an anchor and may interpret `recently` against stale knowledge.
+
+### PR012 — Politeness padding
+Severity: info
+Engine: deterministic (phrase regex covering EN/DE/ES politeness markers)
+Detect: filler phrases that add tokens but no instructional signal: `please`, `kindly`, `if you could`, `would you mind`, `I'd appreciate`, `thanks in advance`, `bitte`, `por favor`, etc.
+Flag: quote each occurrence; note that the phrase is removable without changing model behavior.
+Why it matters: tokens cost money; politeness padding occasionally trains hedged or apologetic outputs. Not severe — emitted as info, surface-once.
+
+### PR013 — Untrusted content introduced without delimiter
+Severity: warning
+Engine: deterministic (intro phrase ending with `:` followed within ~3 lines by content lacking a delimiter)
+Detect: phrases like `the following text:`, `here is the content:`, `process this input:` immediately preceding content that is NOT wrapped in a recognizable delimiter (triple backticks, triple quotes, `<tag>`, `[TAG]`, or `---`).
+Flag: quote the intro phrase; recommend wrapping the input in an explicit delimiter so the model can distinguish instruction text from data.
+Why it matters: undelimited user input is the most common prompt-injection vector; the model cannot tell where the trusted instruction ends and the untrusted data begins.
+
+### PR014 — Reasoning-then-answer without output delimiter
+Severity: info
+Engine: deterministic (reasoning verb + connector + answer noun, with no delimiter hint within ±200 chars)
+Detect: requests like `think step by step then give the answer`, `explain your reasoning and then provide the final response` without specifying a parsable structure (a tag, JSON envelope, code fence, or explicit "begin/end with ..." marker).
+Flag: quote the matched span; recommend specifying the answer envelope (e.g. `<answer>...</answer>` or `Final answer: ...`).
+Why it matters: downstream code cannot reliably split reasoning from answer if the prompt does not specify the boundary.
+
+### PR015 — Rating / confidence requested without scale
+Severity: info
+Engine: deterministic (rating-verb + score-target + no scale anchor within ±200 chars)
+Detect: phrases like `rate your confidence`, `give a probability`, `score the relevance` without an explicit scale (e.g. `0-1`, `1-10`, `percent`, Likert anchors `low/medium/high`).
+Flag: quote the request; recommend attaching a numeric range or anchor set.
+Why it matters: without a scale the model picks one and outputs differ run-to-run, breaking downstream parsing or comparisons.
+
+### PR016 — Open-ended creative output without length bound
+Severity: info
+Engine: deterministic (creative-format noun after generation verb, with no length marker within ±100 chars)
+Detect: prompts like `write an essay about X`, `compose a story`, `draft an email` with no length hint (word count, paragraph count, `brief`, `short`, `concise`, `detailed`, etc.).
+Flag: quote the generation noun; recommend either accepting the model's default (~150–300 words) or specifying a length.
+Why it matters: users are routinely surprised by either too-short or too-long output when no length is specified.
+
+### PR017 — Negation-only prompt
+Severity: info
+Engine: deterministic (≥3 negations and no positive imperative verb anywhere in prompt)
+Detect: prompts containing three or more negation patterns (`don't`, `do not`, `never`, `avoid`, `must not`, ...) without a single positive instructional verb (`write`, `summarize`, `classify`, `produce`, ...).
+Flag: quote the first negation; report the count.
+Why it matters: telling the model what NOT to do without a positive direction often produces ~the forbidden content (the "don't think of a pink elephant" effect). Pair every prohibition with an explicit positive instruction.
 
 ## Prompt-injection / role-confusion
 

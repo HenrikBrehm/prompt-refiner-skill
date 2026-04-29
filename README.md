@@ -5,9 +5,9 @@
 [![Hybrid engine](https://img.shields.io/badge/engine-hybrid-ff7a59)](#how-the-engine-works)
 [![No frameworks](https://img.shields.io/badge/frameworks-none-0b1020)](#what-it-does-and-doesnt)
 [![Lint, don't rewrite](https://img.shields.io/badge/mode-lint--only-ffd166)](references/lint-rules.md)
-[![Conformance](https://img.shields.io/badge/conformance-17%2F17-2a3358)](scripts/run-tests.sh)
+[![Conformance](https://img.shields.io/badge/conformance-25%2F25-2a3358)](scripts/run-tests.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-skill-d97757)](https://claude.com/claude-code)
 [![CI](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml)
 
@@ -36,9 +36,10 @@ This skill **flags** prompt-engineering bugs against a stable, citeable rule cat
 
 Output is Markdown by default. Append `--json` (or ask for "JSON output") to get a report that validates against [`schemas/report.schema.json`](schemas/report.schema.json).
 
-The catalog ships 13 rules across two families:
+The catalog ships 20 rules across three families:
 
 - **Clarity & specificity** — `PR001` vague verb, `PR002` mixed intent, `PR003` ambiguous pronoun, `PR004` scale conflict, `PR005` contradictory constraints, `PR006` unbounded numeric, `PR007` implicit format, `PR008` placeholder leakage, `PR009` conflicting persona, `PR010` untestable success criterion.
+- **Output hygiene & ergonomics** — `PR011` stale relative date, `PR012` politeness padding, `PR013` missing input delimiter, `PR014` reasoning-then-answer without delimiter, `PR015` unscaled rating, `PR016` open-ended creative length, `PR017` negation-only prompt.
 - **Prompt injection / role confusion** — `PR-INJ01` "ignore previous" pattern, `PR-INJ02` post-input role switch, `PR-INJ03` unbounded tool authority.
 
 ## How the engine works
@@ -47,8 +48,11 @@ The skill is a **hybrid linter**, not a pure LLM rubric:
 
 | Pass | Implementation | Rules covered | Reproducible? |
 |---|---|---|---|
-| **Deterministic** | [`scripts/lint.js`](scripts/lint.js) — zero-dep Node | `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03` (8 of 13) | Yes — same input → same findings |
-| **Model** | The LLM at skill activation time | `PR002`, `PR003`, `PR005`, `PR009`, `PR010` (5 of 13) | No — semantic analysis, run-to-run drift |
+| **Pure deterministic** | [`scripts/lint.js`](scripts/lint.js) — zero-dep Node | `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR011`, `PR012`, `PR013`, `PR014`, `PR015`, `PR016`, `PR017`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03` (15 of 20) | Yes — same input → same findings |
+| **Hybrid** | Deterministic basic case in `scripts/lint.js` + semantic case in the model layer | `PR002`, `PR005`, `PR010` (3 of 20) | Basic case: yes. Semantic case: run-to-run drift. |
+| **Pure model** | The LLM at skill activation time | `PR003` (antecedent resolution), `PR009` (persona / domain comparison) (2 of 20) | No — semantic analysis, run-to-run drift |
+
+**18 of 20 rules** have deterministic detection (15 pure + 3 hybrid basic case). Run-to-run drift on the model layer is bounded to the 2 pure-model rules and the semantic surplus of the 3 hybrid rules.
 
 Each finding is tagged with the engine that produced it (`_(deterministic)_` or `_(model)_`) so you can tell which line numbers to trust as stable across re-runs. The deterministic pass is independently runnable in CI without an LLM — see the [CI integration](#ci-integration) section.
 

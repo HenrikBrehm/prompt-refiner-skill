@@ -8,10 +8,11 @@
 #   4. Assert: every forbidden_rules ID does NOT fire (0 findings with that rule_id).
 #   5. Assert: every expected_rules ID exists in references/lint-rules.md.
 #
-# Behavioral checks only run for rules the deterministic engine handles
-# (PR001, PR004, PR006, PR007, PR008, PR-INJ01, PR-INJ02, PR-INJ03).
-# For LLM-only rules (PR002, PR003, PR005, PR009, PR010), the runner
-# verifies catalog membership but does not assert firing.
+# Behavioral checks only run for rules the deterministic engine handles.
+# That now includes the original 8 plus PR011-PR017 (new) and the
+# graduated hybrids PR002, PR005, PR010 (deterministic basic case).
+# For pure model-only rules (PR003, PR009), the runner verifies catalog
+# membership but does not assert firing.
 #
 # Requires: bash, node (already required by validate-skill.sh).
 
@@ -35,7 +36,7 @@ PASS=0
 FAIL=0
 FAILED_FILES=""
 
-DETERMINISTIC="PR001 PR004 PR006 PR007 PR008 PR-INJ01 PR-INJ02 PR-INJ03"
+DETERMINISTIC="PR001 PR002 PR004 PR005 PR006 PR007 PR008 PR010 PR011 PR012 PR013 PR014 PR015 PR016 PR017 PR-INJ01 PR-INJ02 PR-INJ03"
 
 is_deterministic() {
   local r="$1"

@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.4.0] - 2026-04-29
+
+**Catalog expansion + reproducibility fix.** The rule catalog grows from 13 to 20 rules, and the deterministic engine's coverage grows from 8 of 13 (62 %) to 18 of 20 (90 %). Run-to-run drift on the model layer is now bounded to 2 truly-semantic rules (`PR003` antecedent resolution, `PR009` persona comparison) instead of 5.
+
+### Added (7 new rules)
+- `PR011` — Stale or unanchored relative date reference (deterministic, warning). Catches `yesterday`/`last week`/`most recent`/`latest` etc. when no absolute date is anywhere in the prompt.
+- `PR012` — Politeness padding (deterministic, info). Catches `please`, `kindly`, `if you could`, `thanks in advance`, plus DE/ES equivalents.
+- `PR013` — Untrusted content introduced without delimiter (deterministic, warning). Catches `the following text:` / `process this content:` / etc. followed by undelimited input. Common prompt-injection setup.
+- `PR014` — Reasoning-then-answer without output delimiter (deterministic, info). Catches `think step by step then give the answer` patterns where the answer envelope is unspecified.
+- `PR015` — Rating/confidence requested without scale (deterministic, info). Catches `rate your confidence` / `give a probability` without a `0-1`, `1-10`, or `low/medium/high` anchor nearby.
+- `PR016` — Open-ended creative output without length bound (deterministic, info). Catches `write an essay`/`compose a story`/`draft an email` with no length hint.
+- `PR017` — Negation-only prompt (deterministic, info). Fires when a prompt has ≥3 negations and no positive imperative verb. The "don't think of a pink elephant" effect.
+
+### Changed (3 rules graduated from model-only to hybrid)
+- `PR002` (Mixed intent) — added deterministic basic case: two distinct imperative verbs from a known vocabulary joined by `and`/`then` in one sentence. Verb stems must differ so `summarize and refine` is not flagged.
+- `PR005` (Contradictory constraints) — added deterministic basic case via a curated list of known contradiction pairs (JSON ↔ no braces; formal ↔ casual tone; bullet points ↔ prose-only; markdown ↔ plain text only; English ↔ another named language; etc.), checked per paragraph.
+- `PR010` (Untestable success criterion) — added deterministic basic case: a vague-quality adjective (`good`/`high-quality`/`professional`/`engaging`/...) sandwiched between an instructional verb (`write`/`make`/`create`) and an output noun (`response`/`article`/`email`).
+
+### Reproducibility
+- Run-to-run drift is now bounded to `PR003` and `PR009` only. The other 18 rules emit identical findings against fixed input.
+- The hybrid rules (`PR002`, `PR005`, `PR010`) catch obvious cases deterministically; the model pass deduplicates and adds only the semantic cases the regex missed.
+
+### Tooling
+- `scripts/lint.js` bumped to `1.4.0`. Detector list grows from 8 to 18 entries. Zero npm dependencies retained.
+- `scripts/run-tests.sh` `DETERMINISTIC` allowlist updated to match the engine's actual coverage; the runner now strictly asserts firing for all 18 deterministic rules.
+- 8 new conformance corpus cases (`014`–`021`) — one per new rule plus one for the graduated `PR010` deterministic. Test 012 (clean-prompt-no-findings) tightened to forbid all 18 deterministic rules. Total: 25 cases, all passing.
+- Plugin manifests (`plugin.json`, `marketplace.json`) bumped to `1.4.0` with descriptions reflecting the 18/20 split.
+
+### Notes
+- No npm dependencies introduced — detector remains stdlib-only Node.
+- Stability contract preserved: rule IDs are append-only, no renames. `PR002`, `PR005`, `PR010` retained their IDs across the model → hybrid graduation.
+- `schemas/report.schema.json` unchanged — the `engine` field still accepts only `deterministic` or `model` per finding.
+
+---
+
 ## [1.3.0] - 2026-04-29
 
 **Hybrid engine.** The skill stops being a pure LLM rubric and becomes a real linter for the rules where regex is enough. A zero-dep Node detector runs as a deterministic first pass; the model layers the semantic rules on top. Each finding is tagged with which engine produced it.
