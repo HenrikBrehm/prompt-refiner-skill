@@ -4,13 +4,14 @@
 // Usage:
 //   node scripts/lint.js [--format=md|json|text] [--baseline=PATH]
 //                        [--write-baseline=PATH] [--fail-on=error|warning|info|none]
-//                        [--rules=PR001,PR-INJ01,...] [--quiet] [--version]
+//                        [--rules=PR001,PR-INJ01,...] [--no-config] [--quiet] [--version]
 //                        [FILE | -]
 //
 // Reads prompt text from FILE, or stdin if FILE is "-" or omitted.
 // Emits findings for the rules this engine can detect deterministically:
 //   PR001, PR002 (hybrid), PR004, PR005 (hybrid), PR006, PR007, PR008,
 //   PR010 (hybrid), PR011, PR012, PR013, PR014, PR015, PR016, PR017,
+//   PR018, PR019, PR020,
 //   PR-INJ01, PR-INJ02, PR-INJ03.
 // "Hybrid" rules catch the obvious cases here; the model layer in
 // skills/prompt-refiner/SKILL.md adds semantic coverage on top.
@@ -38,38 +39,52 @@ const VERSION = '1.5.0';
 const SKILL_NAME = 'prompt-refiner-skill';
 
 const SEVERITY_RANK = { error: 3, warning: 2, info: 1, none: 0 };
+const VALID_SEVERITIES = ['error', 'warning', 'info'];
+const VALID_SEVERITIES_OFF = ['error', 'warning', 'info', 'off'];
+const VALID_FAILON = ['error', 'warning', 'info', 'none'];
+const RULE_ID_RX = /^PR(-INJ)?[0-9]{2,3}$/;
+const CONFIG_FILE = '.prompt-refiner.json';
+const CONFIG_KEYS = ['severities', 'rules', 'failOn'];
 
 // ---- CLI ---------------------------------------------------------------
 
 function parseArgs(argv) {
+  // Tracked separately so config can fill in unset values without overriding
+  // explicit CLI flags. Anything in `supplied` came from argv.
   const opts = {
     format: 'md',
     baseline: null,
     writeBaseline: null,
-    failOn: 'error',
-    rules: null,
+    failOn: undefined,
+    rules: undefined,
+    noConfig: false,
     quiet: false,
     file: null,
   };
+  const supplied = new Set();
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--version') { console.log(VERSION); process.exit(0); }
     if (a === '--help' || a === '-h') { printHelp(); process.exit(0); }
     if (a === '--quiet') { opts.quiet = true; continue; }
-    if (a.startsWith('--format=')) { opts.format = a.slice(9); continue; }
+    if (a === '--no-config') { opts.noConfig = true; continue; }
+    if (a.startsWith('--format=')) { opts.format = a.slice(9); supplied.add('format'); continue; }
     if (a.startsWith('--baseline=')) { opts.baseline = a.slice(11); continue; }
     if (a.startsWith('--write-baseline=')) { opts.writeBaseline = a.slice(17); continue; }
-    if (a.startsWith('--fail-on=')) { opts.failOn = a.slice(10); continue; }
+    if (a.startsWith('--fail-on=')) { opts.failOn = a.slice(10); supplied.add('failOn'); continue; }
     if (a.startsWith('--rules=')) {
       opts.rules = new Set(a.slice(8).split(',').map(s => s.trim()).filter(Boolean));
+      supplied.add('rules');
       continue;
     }
     if (a === '-' || !a.startsWith('--')) { opts.file = a; continue; }
     fail(`unknown flag: ${a}`, 2);
   }
   if (!['md', 'json', 'text'].includes(opts.format)) fail(`bad --format: ${opts.format}`, 2);
-  if (!['error', 'warning', 'info', 'none'].includes(opts.failOn)) fail(`bad --fail-on: ${opts.failOn}`, 2);
-  return opts;
+  if (opts.failOn !== undefined && !VALID_FAILON.includes(opts.failOn)) {
+    fail(`bad --fail-on: ${opts.failOn}`, 2);
+  }
+  return { opts, supplied };
 }
 
 function printHelp() {
@@ -84,13 +99,23 @@ Options:
   --fail-on=LEVEL         Exit 1 if any finding >= LEVEL fires
                           LEVEL: error (default), warning, info, none
   --rules=ID,ID,...       Restrict to a comma-separated list of rule IDs
+  --no-config             Ignore any .prompt-refiner.json found upward from cwd
   --quiet                 Suppress 'No issues found.' on clean runs
   --version               Print version and exit
   -h, --help              Print this help
 
+Configuration:
+  lint.js searches upward from cwd for .prompt-refiner.json (eslint-style).
+  Recognized keys (strict — unknown keys are an error):
+    "severities": { "<RULE_ID>": "error|warning|info|off" }
+    "rules":      ["<RULE_ID>", ...]
+    "failOn":     "error|warning|info|none"
+  CLI flags always win over config; "off" removes the rule's findings entirely.
+  See SKILL.md "Configuration" for details. Bad JSON exits 2.
+
 Detected deterministically:
   PR001, PR002*, PR004, PR005*, PR006, PR007, PR008, PR010*,
-  PR011, PR012, PR013, PR014, PR015, PR016, PR017,
+  PR011, PR012, PR013, PR014, PR015, PR016, PR017, PR018, PR019, PR020,
   PR-INJ01, PR-INJ02, PR-INJ03.
   (* hybrid — basic case here, semantic case in the model pass.)
 
@@ -102,6 +127,129 @@ persona). The SKILL.md procedure layers those on top of this engine.
 function fail(msg, code) {
   process.stderr.write(`lint.js: ${msg}\n`);
   process.exit(code);
+}
+
+// ---- config-file loading ----------------------------------------------
+//
+// .prompt-refiner.json is searched upward from cwd, eslint-style, stopping
+// at the filesystem root. The first file found wins. Schema is strict —
+// unknown keys are a hard error.
+
+const path = require('path');
+
+function findConfigFile(startDir) {
+  let dir = path.resolve(startDir);
+  while (true) {
+    const candidate = path.join(dir, CONFIG_FILE);
+    try {
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch (_) { /* not present here, keep walking */ }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null; // reached filesystem root
+    dir = parent;
+  }
+}
+
+function loadConfig(cwd, noConfig) {
+  if (noConfig) return null;
+  const filePath = findConfigFile(cwd);
+  if (!filePath) return null;
+  let raw;
+  try { raw = fs.readFileSync(filePath, 'utf8'); }
+  catch (e) { fail(`cannot read config ${filePath}: ${e.message}`, 2); }
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch (e) { fail(`config ${filePath} is not valid JSON: ${e.message}`, 2); }
+  validateConfig(parsed, filePath);
+  return { ...parsed, __path: filePath };
+}
+
+function validateConfig(cfg, filePath) {
+  if (cfg === null || typeof cfg !== 'object' || Array.isArray(cfg)) {
+    fail(`config ${filePath}: top-level must be a JSON object`, 2);
+  }
+  for (const key of Object.keys(cfg)) {
+    if (!CONFIG_KEYS.includes(key)) {
+      fail(
+        `config ${filePath}: unknown key "${key}". ` +
+        `Valid keys: ${CONFIG_KEYS.join(', ')}.`,
+        2
+      );
+    }
+  }
+  if ('severities' in cfg) {
+    const sev = cfg.severities;
+    if (sev === null || typeof sev !== 'object' || Array.isArray(sev)) {
+      fail(`config ${filePath}: "severities" must be an object`, 2);
+    }
+    for (const [rid, val] of Object.entries(sev)) {
+      if (!RULE_ID_RX.test(rid)) {
+        fail(`config ${filePath}: severities key "${rid}" is not a valid rule ID`, 2);
+      }
+      if (!VALID_SEVERITIES_OFF.includes(val)) {
+        fail(
+          `config ${filePath}: severities["${rid}"] = ${JSON.stringify(val)} ` +
+          `must be one of ${VALID_SEVERITIES_OFF.join('|')}`,
+          2
+        );
+      }
+    }
+  }
+  if ('rules' in cfg) {
+    if (!Array.isArray(cfg.rules)) {
+      fail(`config ${filePath}: "rules" must be an array of rule IDs`, 2);
+    }
+    for (const rid of cfg.rules) {
+      if (typeof rid !== 'string' || !RULE_ID_RX.test(rid)) {
+        fail(`config ${filePath}: rules entry ${JSON.stringify(rid)} is not a valid rule ID`, 2);
+      }
+    }
+  }
+  if ('failOn' in cfg) {
+    if (!VALID_FAILON.includes(cfg.failOn)) {
+      fail(
+        `config ${filePath}: "failOn" = ${JSON.stringify(cfg.failOn)} ` +
+        `must be one of ${VALID_FAILON.join('|')}`,
+        2
+      );
+    }
+  }
+}
+
+// Merge config into opts. CLI-supplied values always win.
+// Defaults for unset values are applied here so parseArgs can leave them undefined.
+function applyConfig(opts, supplied, config) {
+  const merged = { ...opts };
+  // failOn: CLI > config > default 'error'
+  if (!supplied.has('failOn')) {
+    merged.failOn = config && 'failOn' in config ? config.failOn : 'error';
+  }
+  // rules: CLI > config (no default — null means "all rules")
+  if (!supplied.has('rules')) {
+    merged.rules = config && 'rules' in config
+      ? new Set(config.rules)
+      : null;
+  }
+  // severities: only from config (no CLI equivalent yet).
+  merged.severities = (config && config.severities) ? { ...config.severities } : null;
+  return merged;
+}
+
+// Apply per-rule severity overrides from config.severities.
+// "off" → drop finding entirely; "error|warning|info" → override severity field.
+function applySeverityOverrides(findings, severities) {
+  if (!severities) return findings;
+  const out = [];
+  for (const f of findings) {
+    const override = severities[f.rule_id];
+    if (override === 'off') continue; // drop
+    if (override && VALID_SEVERITIES.includes(override)) {
+      out.push({ ...f, severity: override });
+    } else {
+      out.push(f);
+    }
+  }
+  return out;
 }
 
 // ---- input I/O ---------------------------------------------------------
@@ -222,6 +370,9 @@ const RATIONALES = {
   PR015: "Rating/confidence requested without a scale — supply a numeric range or anchor (e.g. 0-1, 1-10, percent).",
   PR016: "Open-ended creative output requested without a length bound — specify words/paragraphs or accept the model's default (~150-300 words).",
   PR017: "Negation-heavy prompt with no positive direction — tell the model what to do, not just what to avoid.",
+  PR018: "Output language not specified — name the response language explicitly so the model doesn't guess from the prompt's language.",
+  PR019: "Role / context not defined — the prompt assumes domain knowledge without a role anchor; add 'You are a ...' or 'Act as a ...'.",
+  PR020: "Few-shot examples have inconsistent field structure — every example block should expose the same labels (e.g. all have Input + Output).",
   'PR-INJ01': "Prompt-injection pattern detected — wrap untrusted content in delimiters and treat as data.",
   'PR-INJ02': "Role switch after user-supplied input — reorder so role is fixed before user content.",
   'PR-INJ03': "Unbounded tool/output authority — add an explicit allowlist or denial fallback.",
@@ -702,7 +853,9 @@ function detectPR015(text, findings) {
 
 // ---- PR016: open-ended creative length -------------------------------
 
-const PR016_CREATE = /\b(?:write|compose|draft|create|generate|produce)\s+(?:a|an)\s+(?:[a-z]+\s+){0,3}(essay|story|article|description|summary|report|post|poem|email|letter|memo|review|analysis|caption|blurb|introduction|conclusion|proposal)\b/gi;
+// Allows up to 2 filler tokens between verb and `a/an` so we catch
+// "write me an essay", "draft him a memo", "compose us a poem".
+const PR016_CREATE = /\b(?:write|compose|draft|create|generate|produce)\s+(?:[a-z]+\s+){0,2}(?:a|an)\s+(?:[a-z]+\s+){0,3}(essay|story|article|description|summary|report|post|poem|email|letter|memo|review|analysis|caption|blurb|introduction|conclusion|proposal)\b/gi;
 const PR016_LENGTH = /\b(?:\d+\s+(?:words?|paragraphs?|sentences?|pages?|lines?|chars?|characters?|tokens?)|(?:in\s+)?(?:a\s+)?brief|short|long|concise|detailed|exhaustive|one[- ]?liner|one\s+paragraph|two\s+paragraphs?|under\s+\d+|at\s+most\s+\d+|no\s+more\s+than\s+\d+|tweet[- ]?length)\b/i;
 
 function detectPR016(text, findings) {
@@ -767,6 +920,222 @@ function detectPR017(text, findings) {
   });
 }
 
+// ---- PR018: output language not specified ----------------------------
+//
+// Fires when the prompt contains a generation verb (write/draft/compose/
+// summarize/translate, EN/DE/ES lemmas) and NO explicit language marker
+// appears anywhere in the prompt. Skipped for prompts under 20 words —
+// short prompts default to the prompt's own language reliably enough.
+
+const PR018_GEN_VERB = /\b(write|writes|writing|draft|drafts|drafting|compose|composes|composing|summari[sz]e|summari[sz]es|summari[sz]ing|translate|translates|translating|schreib(?:e|st|t|en)?|verfass(?:e|t|en)?|entwirf|entwerfe|verfasst|zusammenfass(?:e|en|t|ung)|übersetz(?:e|en|t|ung)|escrib[ae]?|escribir|redact[ae]?|redactar|compon[ae]?|componer|resum[ae]?|resumir|traduc[ei]?|traducir)\b/i;
+
+// Explicit output-language markers. Matches:
+//   "in English"/"in Spanish"/... (EN), "auf Deutsch"/"auf Englisch"/... (DE),
+//   "en español"/"en inglés"/... (ES), "to French"/"into German" (translate target),
+//   "respond in <lang>", "reply in <lang>", "output in <lang>", "answer in <lang>",
+//   "antworte auf <lang>", "antworten Sie auf <lang>".
+// Language list is intentionally bounded — a generic "in <Word>" would FP heavily.
+const PR018_LANG_NAMES = '(?:English|German|Deutsch|Spanish|Spanisch|Espa(?:ñ|n)ol|French|Franz(?:ö|oe)sisch|Franc(?:é|e)s|Italian|Italienisch|Italiano|Portuguese|Portugiesisch|Portugu(?:ê|e)s|Japanese|Japanisch|Japon(?:é|e)s|Chinese|Chinesisch|Chino|Mandarin|Korean|Koreanisch|Coreano|Russian|Russisch|Ruso|Dutch|Niederl(?:ä|ae)ndisch|Holand(?:é|e)s|Polish|Polnisch|Polaco|Turkish|T(?:ü|ue)rkisch|Turco|Hebrew|Hebr(?:ä|ae)isch|Hebreo|Arabic|Arabisch(?:en)?|(?:Á|A)rabe|Hindi|Vietnamese|Vietnamesisch|Vietnamita|Swedish|Schwedisch|Sueco|Norwegian|Norwegisch|Noruego|Danish|D(?:ä|ae)nisch|Dan(?:é|e)s|Finnish|Finnisch|Finland(?:é|e)s|Greek|Griechisch|Griego|Czech|Tschechisch|Checo|Ukrainian|Ukrainisch|Ucraniano|Englisch|Inglese|Ingl(?:é|e)s)';
+const PR018_LANG_MARKER = new RegExp(
+  '(?:' +
+    // "in English" / "to English" / "into German" / "en español" / "auf Deutsch"
+    '\\b(?:in|to|into|en|auf|sur|in\\s+der|in\\s+den)\\s+' + PR018_LANG_NAMES + '\\b' +
+    // "respond/reply/answer/output in <lang>"
+    '|\\b(?:respond|reply|answer|output|write|return|reply\\s+back)\\s+(?:back\\s+)?(?:in|on)\\s+' + PR018_LANG_NAMES + '\\b' +
+    // "antworte auf X", "antworten Sie auf X" without language-name constraint (German)
+    '|\\b(?:antworte(?:n)?|schreibe(?:n)?)\\s+(?:Sie\\s+)?(?:auf|in)\\s+' + PR018_LANG_NAMES + '\\b' +
+    // "responde en <lang>" (Spanish)
+    '|\\b(?:responde|contesta|escribe)\\s+en\\s+' + PR018_LANG_NAMES + '\\b' +
+    // explicit "language: X" / "lang: X"
+    '|\\blanguage\\s*[:=]\\s*' + PR018_LANG_NAMES + '\\b' +
+  ')',
+  'i'
+);
+
+function detectPR018(text, findings) {
+  const wordCount = (text.trim().match(/\S+/g) || []).length;
+  // Skip trivial 1-2 word prompts ("draft", "yes thanks") — the
+  // generation default is fine and any signal is too noisy.
+  if (wordCount < 3) return;
+  if (PR018_LANG_MARKER.test(text)) return;
+  PR018_GEN_VERB.lastIndex = 0;
+  const m = PR018_GEN_VERB.exec(text);
+  if (!m) return;
+  const { line, col } = lineColFor(text, m.index);
+  findings.push({
+    rule_id: 'PR018',
+    severity: 'info',
+    line, col,
+    evidence: m[1],
+    rationale: RATIONALES.PR018,
+  });
+}
+
+// ---- PR019: missing role / context definition ------------------------
+//
+// Fires when a long-ish prompt (>50 words) refers to domain-specific
+// terminology without anchoring the model in a role. Domain heuristic:
+//   - ≥ 1 acronym (3+ uppercase letters, e.g. API, JWT, OAuth, K8S), OR
+//   - ≥ 2 capitalized non-sentence-start tokens (proper nouns mid-sentence).
+// A role anchor is any of: "you are", "act as", "as a/an <noun>",
+// "du bist", "actúa como", "agis comme", "your role is".
+
+const PR019_ROLE = /\b(?:you\s+are\s+(?:a|an|the)\b|act\s+as\s+(?:a|an|the)\b|your\s+role\s+is\b|playing\s+the\s+role\b|du\s+bist\s+(?:ein|eine|der|die|das)\b|agiere\s+als\b|verhalte\s+dich\s+wie\b|act(?:ú|u)a\s+como\b|comp(?:ó|o)rtate\s+como\b|tu\s+eres\s+(?:un|una)\b|t(?:ú|u)\s+eres\s+(?:un|una)\b|agis\s+(?:en\s+tant\s+que|comme)\b)/i;
+
+// Acronyms: 3+ uppercase letters, possibly followed by digits (e.g. K8S, OAuth2).
+// We exclude pure separators by requiring a word boundary on both sides.
+const PR019_ACRONYM_RX = /\b[A-Z]{3,}[0-9]*\b/g;
+// Common false-positive acronyms that aren't really domain markers.
+const PR019_ACRONYM_DENY = new Set([
+  'I', 'A', 'OK', 'NO', 'YES', 'PLEASE', 'TODO', 'FIXME',
+  'NULL', 'NONE', 'TRUE', 'FALSE', 'ASCII', 'UTF',
+]);
+
+// Capitalized mid-sentence: a word starting with an uppercase letter that is
+// preceded by a lowercase letter or comma + whitespace. This skips:
+//   - line/file starts, sentence starts (after .!?), headings, list items.
+const PR019_PROPER_NOUN_RX = /[a-z,]\s+([A-Z][a-zA-Z]{2,})/g;
+// Common mid-sentence capitalized words that aren't really domain markers.
+const PR019_PROPER_DENY = new Set([
+  'I', 'My', 'You', 'Your', 'We', 'Our', 'They', 'Their',
+  'Mr', 'Mrs', 'Ms', 'Dr',
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  'January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December',
+  'Ich', 'Mein', 'Mir', 'Dich', 'Wir', 'Unser',
+]);
+
+function detectPR019(text, findings) {
+  const wordCount = (text.trim().match(/\S+/g) || []).length;
+  if (wordCount <= 50) return;
+  if (PR019_ROLE.test(text)) return;
+
+  let acronymHits = 0;
+  let firstAcronym = null;
+  PR019_ACRONYM_RX.lastIndex = 0;
+  let m;
+  while ((m = PR019_ACRONYM_RX.exec(text))) {
+    if (PR019_ACRONYM_DENY.has(m[0])) continue;
+    acronymHits++;
+    if (firstAcronym === null) firstAcronym = m;
+  }
+
+  let properHits = 0;
+  let firstProper = null;
+  PR019_PROPER_NOUN_RX.lastIndex = 0;
+  while ((m = PR019_PROPER_NOUN_RX.exec(text))) {
+    const word = m[1];
+    if (PR019_PROPER_DENY.has(word)) continue;
+    properHits++;
+    if (firstProper === null) {
+      firstProper = { index: m.index + m[0].indexOf(word), word };
+    }
+  }
+
+  const triggers = (acronymHits >= 1) || (properHits >= 2);
+  if (!triggers) return;
+
+  // Anchor evidence at the earliest signal we found.
+  let evIndex, evidence;
+  if (firstAcronym && (!firstProper || firstAcronym.index < firstProper.index)) {
+    evIndex = firstAcronym.index;
+    evidence = firstAcronym[0];
+  } else {
+    evIndex = firstProper.index;
+    evidence = firstProper.word;
+  }
+  const { line, col } = lineColFor(text, evIndex);
+  findings.push({
+    rule_id: 'PR019',
+    severity: 'warning',
+    line, col,
+    evidence,
+    rationale: RATIONALES.PR019,
+  });
+}
+
+// ---- PR020: few-shot with uneven example structure -------------------
+//
+// Fires when the prompt contains ≥ 2 example blocks and the set of field
+// labels per block differs (e.g. block 1 has Input + Output, block 2 has
+// only Output). Two block-detection modes:
+//   A. Explicit block markers ("Example:", "Beispiel:", "Ejemplo:",
+//      optionally numbered).
+//   B. Fallback: ≥ 2 occurrences of "Input:" — each Input begins a block.
+
+const PR020_BLOCK_MARKER = /^[ \t]*((?:Example|Beispiel|Ejemplo|Sample)(?:\s*\d+)?\s*[:\-])/gim;
+const PR020_INPUT_LABEL = /^[ \t]*((?:Input|Eingabe|Entrada|Frage|Question|Pregunta|Prompt|User)\s*[:\-])/gim;
+const PR020_FIELD_RX = /\b(Input|Output|Question|Answer|Response|Reply|Prompt|User|Assistant|Eingabe|Ausgabe|Frage|Antwort|Entrada|Salida|Pregunta|Respuesta)\s*[:\-]/gi;
+
+function collectBlockStarts(text) {
+  // Try mode A first.
+  const markers = [];
+  let m;
+  PR020_BLOCK_MARKER.lastIndex = 0;
+  while ((m = PR020_BLOCK_MARKER.exec(text))) {
+    const labelStart = m.index + m[0].indexOf(m[1]);
+    markers.push({ start: labelStart, label: m[1] });
+  }
+  if (markers.length >= 2) return markers;
+  // Mode B: input labels.
+  const inputs = [];
+  PR020_INPUT_LABEL.lastIndex = 0;
+  while ((m = PR020_INPUT_LABEL.exec(text))) {
+    const labelStart = m.index + m[0].indexOf(m[1]);
+    inputs.push({ start: labelStart, label: m[1] });
+  }
+  if (inputs.length >= 2) return inputs;
+  return null;
+}
+
+function detectPR020(text, findings) {
+  const starts = collectBlockStarts(text);
+  if (!starts) return;
+  const blocks = starts.map((s, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1].start : text.length;
+    return { start: s.start, body: text.slice(s.start, end) };
+  });
+  const fieldSets = blocks.map(b => {
+    const set = new Set();
+    let m;
+    PR020_FIELD_RX.lastIndex = 0;
+    while ((m = PR020_FIELD_RX.exec(b.body))) {
+      set.add(m[1].toLowerCase());
+    }
+    return set;
+  });
+  // Drop blocks that contain zero recognizable fields — likely a heading
+  // false positive ("Example use cases:" with no Input/Output below).
+  const populated = blocks
+    .map((b, i) => ({ block: b, fields: fieldSets[i] }))
+    .filter(x => x.fields.size > 0);
+  if (populated.length < 2) return;
+  const sizes = populated.map(x => x.fields.size);
+  const allEqual = sizes.every(s => s === sizes[0]);
+  if (allEqual) {
+    // Same size — also check that they share the same field NAMES.
+    const reference = [...populated[0].fields].sort().join(',');
+    const consistent = populated.every(x =>
+      [...x.fields].sort().join(',') === reference
+    );
+    if (consistent) return;
+  }
+  // Fire on the first block whose fieldset diverges from the modal one.
+  const minIdx = sizes.indexOf(Math.min(...sizes));
+  const target = populated[minIdx].block;
+  const { line, col } = lineColFor(text, target.start);
+  // Evidence: trim to the marker line itself.
+  const lineEnd = text.indexOf('\n', target.start);
+  const evidence = text.slice(target.start, lineEnd === -1 ? target.start + 40 : lineEnd).trim();
+  findings.push({
+    rule_id: 'PR020',
+    severity: 'warning',
+    line, col,
+    evidence: evidence.slice(0, 80),
+    rationale: RATIONALES.PR020,
+  });
+}
+
 // ---- helpers ----------------------------------------------------------
 
 function collectMatches(text, rx) {
@@ -797,6 +1166,9 @@ const DETECTORS = [
   ['PR015', detectPR015],
   ['PR016', detectPR016],
   ['PR017', detectPR017],
+  ['PR018', detectPR018],
+  ['PR019', detectPR019],
+  ['PR020', detectPR020],
   ['PR-INJ01', detectPRInj01],
   ['PR-INJ02', detectPRInj02],
   ['PR-INJ03', detectPRInj03],
@@ -810,13 +1182,17 @@ function lint(text, opts) {
   const raw = [];
   for (const [rid, fn] of DETECTORS) {
     if (filterRules && !filterRules.has(rid)) continue;
+    // config severity = "off" → skip detector entirely (cheaper than post-filter)
+    if (opts.severities && opts.severities[rid] === 'off') continue;
     fn(text, raw);
   }
 
-  const kept = raw
+  let kept = raw
     .filter(f => !isSuppressed(suppressions, f.rule_id, f.line))
     .filter(f => !inBaseline(baseline, f))
     .map(f => ({ ...f, engine: 'deterministic' }));
+
+  kept = applySeverityOverrides(kept, opts.severities);
 
   kept.sort((a, b) =>
     (a.line - b.line) || (a.col - b.col) || a.rule_id.localeCompare(b.rule_id)
@@ -868,7 +1244,9 @@ function formatText(findings) {
 // ---- entry point ------------------------------------------------------
 
 function main() {
-  const opts = parseArgs(process.argv.slice(2));
+  const { opts: cliOpts, supplied } = parseArgs(process.argv.slice(2));
+  const config = loadConfig(process.cwd(), cliOpts.noConfig);
+  const opts = applyConfig(cliOpts, supplied, config);
   const text = readInput(opts.file);
   const findings = lint(text, opts);
 

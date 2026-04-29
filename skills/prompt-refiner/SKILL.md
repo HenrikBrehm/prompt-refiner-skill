@@ -115,6 +115,26 @@ Do not propose a rewritten version of the prompt in lint reports. Do not ask the
 
 If the user explicitly asks for a rewrite after receiving a lint report, treat that as a new non-linting request outside this skill.
 
+## Configuration
+
+`scripts/lint.js` reads an optional `.prompt-refiner.json` file. The detector searches upward from the current working directory (eslint-style) and stops at the filesystem root. The first file found wins. Pass `--no-config` to bypass loading entirely (useful in CI when you want deterministic output regardless of where the runner ran).
+
+Recognized keys (strict — unknown keys are an error):
+
+```json
+{
+  "severities": { "PR012": "off", "PR016": "warning" },
+  "rules":      ["PR001", "PR002", "PR-INJ01"],
+  "failOn":     "warning"
+}
+```
+
+- `severities` — per-rule overrides. Values: `error`, `warning`, `info`, or `off`. `off` removes the finding entirely (it does not appear in output and does not influence `--fail-on`); the other three replace the rule's default severity.
+- `rules` — optional allowlist. When set, only listed rule IDs are run. CLI `--rules=...` always wins over the config allowlist.
+- `failOn` — same semantics as the CLI flag: `error`, `warning`, `info`, or `none`. CLI `--fail-on=...` always wins.
+
+Merge order is `built-in defaults → config file → CLI flags`; CLI flags always win. Bad JSON (parse error, invalid severity, unknown key) exits with code `2` and prints the path that failed.
+
 ## Suppression
 
 Honor inline HTML suppression comments in both passes:

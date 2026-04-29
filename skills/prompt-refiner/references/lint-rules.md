@@ -15,7 +15,7 @@ Engine: each rule below carries an `Engine:` line.
 - `hybrid` — basic cases caught deterministically; semantic cases caught by the model.
 
 Rules currently detected by the deterministic engine:
-- **Pure deterministic** (no model overlap): `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR011`, `PR012`, `PR013`, `PR014`, `PR015`, `PR016`, `PR017`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03`.
+- **Pure deterministic** (no model overlap): `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR011`, `PR012`, `PR013`, `PR014`, `PR015`, `PR016`, `PR017`, `PR018`, `PR019`, `PR020`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03`.
 - **Hybrid** (deterministic basic case + model semantic case): `PR002`, `PR005`, `PR010`.
 - **Pure model** (no reliable regex possible): `PR003` (antecedent resolution), `PR009` (persona/domain comparison).
 
@@ -140,6 +140,51 @@ Engine: deterministic (≥3 negations and no positive imperative verb anywhere i
 Detect: prompts containing three or more negation patterns (`don't`, `do not`, `never`, `avoid`, `must not`, ...) without a single positive instructional verb (`write`, `summarize`, `classify`, `produce`, ...).
 Flag: quote the first negation; report the count.
 Why it matters: telling the model what NOT to do without a positive direction often produces ~the forbidden content (the "don't think of a pink elephant" effect). Pair every prohibition with an explicit positive instruction.
+
+### PR018 — Output language not specified
+Severity: info
+Engine: deterministic (generation-verb match + absence of any explicit language marker in the whole prompt)
+Detect: the prompt contains a generation verb (`write`, `draft`, `compose`, `summarize`, `translate` and EN/DE/ES lemmas) AND no explicit output-language marker appears anywhere in the prompt. Markers include `in <Lang>`, `to <Lang>`, `into <Lang>`, `auf <Lang>`, `en <Lang>`, `respond in <Lang>`, `output in <Lang>`, `language: <Lang>` for a bounded list of named languages (English, German, Spanish, French, Italian, Portuguese, Japanese, Chinese, Korean, Russian, Dutch, Polish, Turkish, Hebrew, Arabic, Hindi, Vietnamese, Swedish, Norwegian, Danish, Finnish, Greek, Czech, Ukrainian — and EN/DE/ES translations of each).
+Flag: quote the generation verb; recommend stating the response language explicitly so the model doesn't default-guess from prompt language.
+Note: prompts under 3 words (e.g. `Yes thanks`) are skipped — defaults are reliable on trivial inputs.
+Why it matters: when no language is named, the model heuristically picks one based on the prompt's own language. That default is fine in many cases but invisible to downstream code expecting a specific language and a frequent silent-defect source for international teams.
+Example bad: `Write me a summary of the Q3 strategy doc and post it on the channel.`
+Example good: `Write me a summary of the Q3 strategy doc in English and post it on the channel.`
+
+### PR019 — Missing role / context definition
+Severity: warning
+Engine: deterministic (>50-word prompt + domain-noun heuristic + absence of role anchor)
+Detect: a prompt longer than 50 words that uses domain-specific terminology — defined as ≥1 acronym of 3+ uppercase letters (e.g. `API`, `JWT`, `K8S`, `OAuth2`) OR ≥2 capitalized non-sentence-start tokens (proper nouns mid-sentence, e.g. `Stripe`, `Kubernetes`, `Postgres`) — without a role anchor. Role anchors include `you are a/an/the`, `act as a/an/the`, `as a/an <noun>`, `your role is`, `playing the role`, `du bist ein/eine/...`, `agiere als`, `verhalte dich wie`, `actúa como`, `compórtate como`, `tú eres un/una`, `agis comme/en tant que`. Common false-positive acronyms (`I`, `OK`, `TODO`, `NULL`, `TRUE`, ...) and proper nouns (`I`, `Mr`, weekday/month names, German pronouns) are excluded.
+Flag: quote the earliest domain marker; recommend prepending an explicit role/context line so the model anchors its expertise and tone.
+Why it matters: long, domain-heavy prompts without a role often get generic, hedge-y answers because the model has not been told what expert posture to adopt. A one-line role anchor steers vocabulary, depth, and assumed background.
+Example bad: `We need to migrate the OAuth2 layer from Auth0 to Keycloak while keeping JWT signing keys rotated through Vault. Document the Postgres schema changes and the Kubernetes ingress path. Include a rollback plan.`
+Example good: `You are a senior platform engineer. We need to migrate the OAuth2 layer from Auth0 to Keycloak ...`
+
+### PR020 — Few-shot with uneven example structure
+Severity: warning
+Engine: deterministic (≥2 example blocks, mismatched field-label sets per block)
+Detect: ≥2 example blocks marked with `Example:`, `Beispiel:`, `Ejemplo:`, `Sample:` (optionally numbered, e.g. `Example 1:`), OR — when no explicit block markers are present — ≥2 occurrences of `Input:`/`Eingabe:`/`Entrada:`/`Frage:`/`Question:`/`Pregunta:`/`Prompt:`/`User:` each starting a new block. Each block is then scanned for field labels: `Input`, `Output`, `Question`, `Answer`, `Response`, `Reply`, `Prompt`, `User`, `Assistant`, plus DE (`Eingabe`, `Ausgabe`, `Frage`, `Antwort`) and ES (`Entrada`, `Salida`, `Pregunta`, `Respuesta`) equivalents. Fires when the field-label set differs across blocks (block 1 has `Input` + `Output`, block 2 has only `Output`; or block 1 uses `Input`/`Output` and block 2 uses `Question`/`Answer`).
+Flag: quote the marker line of the smallest/divergent block; recommend normalizing every example block to expose the same labels.
+Why it matters: few-shot models infer the output schema from the example structure. Inconsistent fields confuse the inference — the model may copy the smallest block's structure or hallucinate a missing field.
+Example bad:
+```
+Example 1:
+Input: I love this product
+Output: positive
+
+Example 2:
+Output: negative
+```
+Example good:
+```
+Example 1:
+Input: I love this product
+Output: positive
+
+Example 2:
+Input: This was awful
+Output: negative
+```
 
 ## Prompt-injection / role-confusion
 

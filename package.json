@@ -1,0 +1,10 @@
+{
+  "name": "prompt-refiner-skill",
+  "version": "1.5.0",
+  "description": "Lints existing prompts for prompt-engineering defects and prompt-injection risks. Zero-dependency Node detector + Claude Code skill.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run.js"
+  }
+}
