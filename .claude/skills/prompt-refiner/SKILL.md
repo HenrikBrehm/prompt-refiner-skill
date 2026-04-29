@@ -1,6 +1,7 @@
 ---
 name: prompt-refiner
 description: Refines the user's prompt before executing it — makes it clearer, more precise, and better structured without changing intent, tone, or scope, then carries out the refined version. Use whenever the user asks to refine-and-run a prompt, or invokes this skill explicitly.
+license: MIT
 ---
 
 # Prompt Refiner
