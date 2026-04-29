@@ -1,0 +1,21 @@
+{
+  "name": "prompt-refiner",
+  "description": "The anti-bloat prompt refiner. Lightly refines a user's prompt — clearer, more precise, better structured — without changing intent, tone, scope, or language, then executes it. No framework rewrites, no clarifying questions unless truly necessary, fixed two-section output.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Henrik Brehm",
+    "url": "https://github.com/HenrikBrehm"
+  },
+  "homepage": "https://github.com/HenrikBrehm/prompt-refiner-skill",
+  "repository": "https://github.com/HenrikBrehm/prompt-refiner-skill",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-skill",
+    "agent-skills",
+    "prompt-engineering",
+    "prompt-refinement",
+    "prompt-improvement",
+    "anti-bloat"
+  ]
+}
