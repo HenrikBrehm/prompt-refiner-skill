@@ -1,45 +1,72 @@
 #!/usr/bin/env bash
 # Conformance test runner for prompt-refiner-skill.
-# Validates corpus structure: every file in tests/corpus/ has a frontmatter
-# block with test_id, expected_rules, forbidden_rules, language, and a body.
-# This runner does NOT execute the skill; it asserts the corpus is well-formed
-# and that every expected_rules ID exists in references/lint-rules.md.
+#
+# For every file in tests/corpus/*.md (and tests/corpus/i18n/*.md):
+#   1. Parse YAML-ish frontmatter for: test_id, expected_rules, forbidden_rules, language.
+#   2. Strip frontmatter and pipe the body to scripts/lint.js (JSON output).
+#   3. Assert: every expected_rules ID FIRES (>=1 finding with that rule_id).
+#   4. Assert: every forbidden_rules ID does NOT fire (0 findings with that rule_id).
+#   5. Assert: every expected_rules ID exists in references/lint-rules.md.
+#
+# Behavioral checks only run for rules the deterministic engine handles
+# (PR001, PR004, PR006, PR007, PR008, PR-INJ01, PR-INJ02, PR-INJ03).
+# For LLM-only rules (PR002, PR003, PR005, PR009, PR010), the runner
+# verifies catalog membership but does not assert firing.
+#
+# Requires: bash, node (already required by validate-skill.sh).
+
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORPUS_DIR="$ROOT/tests/corpus"
 RULES_FILE="$ROOT/references/lint-rules.md"
+LINT="$ROOT/scripts/lint.js"
 
-if [ ! -d "$CORPUS_DIR" ]; then
-  echo "FAIL: $CORPUS_DIR missing" >&2
-  exit 1
-fi
-if [ ! -f "$RULES_FILE" ]; then
-  echo "FAIL: $RULES_FILE missing" >&2
-  exit 1
-fi
+[ -d "$CORPUS_DIR" ] || { echo "FAIL: $CORPUS_DIR missing" >&2; exit 1; }
+[ -f "$RULES_FILE" ] || { echo "FAIL: $RULES_FILE missing" >&2; exit 1; }
+[ -f "$LINT"       ] || { echo "FAIL: $LINT missing"       >&2; exit 1; }
+command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; }
 
-# Extract every defined rule ID from references/lint-rules.md.
 DEFINED_RULES="$(grep -E '^### (PR[0-9]{3}|PR-INJ[0-9]{2,3})' "$RULES_FILE" \
   | awk '{print $2}' | sort -u)"
-
-if [ -z "$DEFINED_RULES" ]; then
-  echo "FAIL: no rule IDs parsed from $RULES_FILE" >&2
-  exit 1
-fi
+[ -n "$DEFINED_RULES" ] || { echo "FAIL: no rule IDs parsed from $RULES_FILE" >&2; exit 1; }
 
 PASS=0
 FAIL=0
 FAILED_FILES=""
 
-# shellcheck disable=SC2044
-for f in $(find "$CORPUS_DIR" -type f -name '*.md' | sort); do
+DETERMINISTIC="PR001 PR004 PR006 PR007 PR008 PR-INJ01 PR-INJ02 PR-INJ03"
+
+is_deterministic() {
+  local r="$1"
+  for d in $DETERMINISTIC; do [ "$d" = "$r" ] && return 0; done
+  return 1
+}
+
+extract_rule_ids() {
+  node -e '
+    let buf="";
+    process.stdin.on("data", d => buf += d);
+    process.stdin.on("end", () => {
+      try {
+        const obj = JSON.parse(buf);
+        for (const f of (obj.findings || [])) console.log(f.rule_id);
+      } catch (e) {
+        process.stderr.write("bad json from lint.js: " + e.message + "\n");
+        process.exit(2);
+      }
+    });
+  '
+}
+
+while IFS= read -r f; do
   rel="${f#"$ROOT"/}"
-  # frontmatter must be the first block delimited by ---
+
   if ! head -n 1 "$f" | grep -qx -- '---'; then
     echo "FAIL [$rel]: missing leading ---"
     FAIL=$((FAIL+1)); FAILED_FILES="$FAILED_FILES $rel"; continue
   fi
+
   fm="$(awk 'NR==1 && /^---$/ {flag=1; next} /^---$/ && flag {exit} flag' "$f")"
   test_id="$(printf '%s\n' "$fm" | awk -F': *' '/^test_id:/ {print $2; exit}')"
   expected="$(printf '%s\n' "$fm" | awk -F': *' '/^expected_rules:/ {print $2; exit}')"
@@ -51,48 +78,75 @@ for f in $(find "$CORPUS_DIR" -type f -name '*.md' | sort); do
     echo "FAIL [$rel]: missing test_id or language"
     FAIL=$((FAIL+1)); FAILED_FILES="$FAILED_FILES $rel"; continue
   fi
-  if [ -z "$expected" ]; then
-    echo "FAIL [$rel]: expected_rules is empty"
-    FAIL=$((FAIL+1)); FAILED_FILES="$FAILED_FILES $rel"; continue
-  fi
   if [ -z "$body" ]; then
     echo "FAIL [$rel]: empty body"
     FAIL=$((FAIL+1)); FAILED_FILES="$FAILED_FILES $rel"; continue
   fi
 
-  # Every comma-separated expected rule must be defined.
   ok=1
-  IFS=',' read -r -a arr <<< "$expected"
-  for r in "${arr[@]}"; do
-    rid="$(printf '%s' "$r" | tr -d '[:space:]')"
-    if ! printf '%s\n' "$DEFINED_RULES" | grep -qx -- "$rid"; then
-      echo "FAIL [$rel]: expected_rules contains undefined rule '$rid'"
-      ok=0; break
-    fi
+
+  # 1) catalog check: expected and forbidden rule IDs must be defined.
+  for kind in expected forbidden; do
+    val=""
+    [ "$kind" = "expected" ] && val="$expected"
+    [ "$kind" = "forbidden" ] && val="$forbidden"
+    [ -z "$val" ] && continue
+    IFS=',' read -r -a arr <<< "$val"
+    for r in "${arr[@]}"; do
+      rid="$(printf '%s' "$r" | tr -d '[:space:]')"
+      [ -z "$rid" ] && continue
+      if ! printf '%s\n' "$DEFINED_RULES" | grep -qx -- "$rid"; then
+        echo "FAIL [$rel]: ${kind}_rules contains undefined rule '$rid'"
+        ok=0
+      fi
+    done
   done
   if [ "$ok" -eq 0 ]; then
     FAIL=$((FAIL+1)); FAILED_FILES="$FAILED_FILES $rel"; continue
   fi
 
-  # Forbidden rules (if any) must also be defined IDs (typo guard).
-  if [ -n "$forbidden" ]; then
-    IFS=',' read -r -a barr <<< "$forbidden"
-    for r in "${barr[@]}"; do
+  # 2) behavioral check: run the detector on the body.
+  json="$(printf '%s\n' "$body" | node "$LINT" --format=json --fail-on=none -)"
+  fired_ids="$(printf '%s' "$json" | extract_rule_ids | sort -u)"
+
+  # Every deterministic expected rule must fire.
+  if [ -n "$expected" ]; then
+    IFS=',' read -r -a exp_arr <<< "$expected"
+    for r in "${exp_arr[@]}"; do
       rid="$(printf '%s' "$r" | tr -d '[:space:]')"
       [ -z "$rid" ] && continue
-      if ! printf '%s\n' "$DEFINED_RULES" | grep -qx -- "$rid"; then
-        echo "FAIL [$rel]: forbidden_rules contains undefined rule '$rid'"
-        ok=0; break
+      if is_deterministic "$rid"; then
+        if ! printf '%s\n' "$fired_ids" | grep -qx -- "$rid"; then
+          echo "FAIL [$rel]: expected rule '$rid' did not fire"
+          ok=0
+        fi
       fi
     done
   fi
+
+  # No deterministic forbidden rule may fire.
+  if [ -n "$forbidden" ]; then
+    IFS=',' read -r -a fb_arr <<< "$forbidden"
+    for r in "${fb_arr[@]}"; do
+      rid="$(printf '%s' "$r" | tr -d '[:space:]')"
+      [ -z "$rid" ] && continue
+      if is_deterministic "$rid"; then
+        if printf '%s\n' "$fired_ids" | grep -qx -- "$rid"; then
+          echo "FAIL [$rel]: forbidden rule '$rid' fired"
+          ok=0
+        fi
+      fi
+    done
+  fi
+
   if [ "$ok" -eq 0 ]; then
     FAIL=$((FAIL+1)); FAILED_FILES="$FAILED_FILES $rel"; continue
   fi
 
-  echo "PASS [$rel] test_id=$test_id lang=$lang expects=$expected"
+  fired_csv="$(printf '%s' "$fired_ids" | tr '\n' ',' | sed 's/,$//')"
+  echo "PASS [$rel] test_id=$test_id lang=$lang fired=${fired_csv:-none}"
   PASS=$((PASS+1))
-done
+done < <(find "$CORPUS_DIR" -type f -name '*.md' | sort)
 
 echo
 echo "RESULT: $PASS passed, $FAIL failed"

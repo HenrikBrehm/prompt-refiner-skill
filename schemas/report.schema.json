@@ -21,7 +21,8 @@
           "line": { "type": "integer", "minimum": 1 },
           "col": { "type": "integer", "minimum": 1 },
           "evidence": { "type": "string", "minLength": 1 },
-          "rationale": { "type": "string", "minLength": 1 }
+          "rationale": { "type": "string", "minLength": 1 },
+          "engine": { "type": "string", "enum": ["deterministic", "model"] }
         }
       }
     },

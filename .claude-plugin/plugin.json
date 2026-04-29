@@ -1,7 +1,7 @@
 {
   "name": "prompt-refiner",
-  "description": "Flags prompt-engineering bugs in your prompt against a stable rule catalog (PR001–PR-INJ03). Lint, don't rewrite. Markdown or JSON output, conformance corpus, CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
-  "version": "1.2.0",
+  "description": "Hybrid prompt linter — deterministic Node detector for 8 of 13 rules (PR001, PR004, PR006, PR007, PR008, PR-INJ01–03), LLM model layer for the semantic rest (PR002, PR003, PR005, PR009, PR010). Lint, don't rewrite. Markdown or JSON output, suppression comments, baseline mode, conformance corpus (17 cases), CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
+  "version": "1.3.0",
   "author": {
     "name": "Henrik Brehm",
     "url": "https://github.com/HenrikBrehm"

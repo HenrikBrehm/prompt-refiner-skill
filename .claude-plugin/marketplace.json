@@ -5,14 +5,14 @@
     "url": "https://github.com/HenrikBrehm"
   },
   "metadata": {
-    "description": "Anti-bloat prompt linter for Claude Code — flags prompt-engineering bugs, never rewrites."
+    "description": "Hybrid prompt linter for Claude Code — deterministic Node detector + LLM model layer. Flags prompt-engineering bugs, never rewrites."
   },
   "plugins": [
     {
       "name": "prompt-refiner",
       "source": "./",
-      "description": "Flags prompt-engineering bugs against a stable rule catalog (PR001–PR-INJ03). Lint, don't rewrite. Markdown or JSON output, conformance corpus, CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
-      "version": "1.2.0",
+      "description": "Hybrid prompt linter — deterministic Node detector for 8 of 13 rules, LLM model layer for the semantic rest. Lint, don't rewrite. Markdown or JSON output, suppression comments, baseline mode, conformance corpus (17 cases), CI recipes. Never imposes a framework, never asks clarifying questions, never auto-rewrites.",
+      "version": "1.3.0",
       "keywords": [
         "claude-code",
         "claude-skill",
@@ -20,6 +20,7 @@
         "prompt-linter",
         "prompt-lint",
         "linter",
+        "hybrid-linter",
         "prompts",
         "llm",
         "agent-skills",

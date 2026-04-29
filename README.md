@@ -1,13 +1,13 @@
 # prompt-refiner-skill
 
-> Flags prompt-engineering bugs in your prompt against a stable rule catalog. **Lint, don't rewrite.** No framework imposition. No interview flow. No language switching.
+> A hybrid prompt linter — deterministic Node detector for the regex-able rules, model for the semantic ones. **Lint, don't rewrite.** No framework imposition. No interview flow. No language switching.
 
-[![Anti-bloat](https://img.shields.io/badge/anti--bloat-strict-ff7a59)](references/lint-rules.md)
+[![Hybrid engine](https://img.shields.io/badge/engine-hybrid-ff7a59)](#how-the-engine-works)
 [![No frameworks](https://img.shields.io/badge/frameworks-none-0b1020)](#what-it-does-and-doesnt)
 [![Lint, don't rewrite](https://img.shields.io/badge/mode-lint--only-ffd166)](references/lint-rules.md)
-[![Conformance](https://img.shields.io/badge/conformance-bash-2a3358)](scripts/run-tests.sh)
+[![Conformance](https://img.shields.io/badge/conformance-17%2F17-2a3358)](scripts/run-tests.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-skill-d97757)](https://claude.com/claude-code)
 [![CI](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/HenrikBrehm/prompt-refiner-skill/actions/workflows/validate.yml)
 
@@ -16,6 +16,7 @@
 ## Contents
 
 - [What it does (and doesn't)](#what-it-does-and-doesnt)
+- [How the engine works](#how-the-engine-works)
 - [Install](#install)
 - [Usage](#usage)
 - [Example](#example)
@@ -39,6 +40,17 @@ The catalog ships 13 rules across two families:
 
 - **Clarity & specificity** — `PR001` vague verb, `PR002` mixed intent, `PR003` ambiguous pronoun, `PR004` scale conflict, `PR005` contradictory constraints, `PR006` unbounded numeric, `PR007` implicit format, `PR008` placeholder leakage, `PR009` conflicting persona, `PR010` untestable success criterion.
 - **Prompt injection / role confusion** — `PR-INJ01` "ignore previous" pattern, `PR-INJ02` post-input role switch, `PR-INJ03` unbounded tool authority.
+
+## How the engine works
+
+The skill is a **hybrid linter**, not a pure LLM rubric:
+
+| Pass | Implementation | Rules covered | Reproducible? |
+|---|---|---|---|
+| **Deterministic** | [`scripts/lint.js`](scripts/lint.js) — zero-dep Node | `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03` (8 of 13) | Yes — same input → same findings |
+| **Model** | The LLM at skill activation time | `PR002`, `PR003`, `PR005`, `PR009`, `PR010` (5 of 13) | No — semantic analysis, run-to-run drift |
+
+Each finding is tagged with the engine that produced it (`_(deterministic)_` or `_(model)_`) so you can tell which line numbers to trust as stable across re-runs. The deterministic pass is independently runnable in CI without an LLM — see the [CI integration](#ci-integration) section.
 
 ## Install
 
@@ -118,14 +130,32 @@ These tools complement each other: use `prompt-architect` to **write** a prompt,
 
 ## CI integration
 
-Drop-in recipes for invoking the skill from your own pipeline:
+The deterministic detector runs without an LLM, so you can wire it directly into git hooks and CI:
 
+```bash
+# Block commits with errors
+node scripts/lint.js --fail-on=error path/to/prompt.md
+
+# JSON output for downstream tools
+node scripts/lint.js --format=json path/to/prompt.md
+
+# Lock current findings, fail only on new ones
+node scripts/lint.js --write-baseline=.prompt-refiner-baseline.json path/to/prompt.md
+node scripts/lint.js --baseline=.prompt-refiner-baseline.json --fail-on=warning path/to/prompt.md
+```
+
+Suppress findings inline:
+- `<!-- prompt-refiner-disable PR001 -->` — file-wide.
+- `<!-- prompt-refiner-disable-next-line PR001 -->` — only the following line.
+- `<!-- prompt-refiner-disable-line PR001 -->` — only the line it appears on.
+
+Drop-in recipes:
 - [`recipes/pre-commit.md`](recipes/pre-commit.md) — block commits with `error`-severity findings.
 - [`recipes/github-action.md`](recipes/github-action.md) — comment the report on every PR that touches `*.prompt.md`.
 
 ## Cost & footprint
 
-The skill loads the lint catalog plus frontmatter on activation (≈ a few KB of Markdown). It calls no external APIs, ships no binaries, and adds no runtime dependencies beyond a POSIX shell. The conformance suite ([`scripts/run-tests.sh`](scripts/run-tests.sh)) finishes in under one second on the shipped corpus; see [`scripts/bench.sh`](scripts/bench.sh) to reproduce.
+The skill loads the lint catalog plus frontmatter on activation (≈ a few KB of Markdown). The deterministic detector ([`scripts/lint.js`](scripts/lint.js)) is a single ~500-line Node file with **zero npm dependencies** — only the Node stdlib. It calls no external APIs and ships no binaries. The conformance suite ([`scripts/run-tests.sh`](scripts/run-tests.sh)) runs all 17 corpus cases in under a second; see [`scripts/bench.sh`](scripts/bench.sh) to reproduce.
 
 ## Star history
 

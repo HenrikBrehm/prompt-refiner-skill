@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.3.0] - 2026-04-29
+
+**Hybrid engine.** The skill stops being a pure LLM rubric and becomes a real linter for the rules where regex is enough. A zero-dep Node detector runs as a deterministic first pass; the model layers the semantic rules on top. Each finding is tagged with which engine produced it.
+
+### Added
+- `scripts/lint.js` — zero-dep Node detector. Implements `PR001`, `PR004`, `PR006`, `PR007`, `PR008`, `PR-INJ01`, `PR-INJ02`, `PR-INJ03` deterministically. Supports `--format=md|json|text`, `--fail-on=error|warning|info|none`, `--rules=ID,ID,...`, `--quiet`, `--version`. Reads from FILE or stdin.
+- Suppression comments — `<!-- prompt-refiner-disable RULE -->` (file-wide), `<!-- prompt-refiner-disable-next-line RULE -->`, `<!-- prompt-refiner-disable-line RULE -->`. Honored by the detector and (per SKILL.md) by the model pass.
+- Baseline mode — `--write-baseline=PATH` snapshots current findings; `--baseline=PATH` suppresses them on subsequent runs so CI fails only on *new* findings.
+- New corpus cases: `008-unbounded-quantifier` (PR006), `009-implicit-json` (PR007), `010-role-switch-after-input` (PR-INJ02), `011-unbounded-authority` (PR-INJ03), `012-clean-prompt-no-findings` (negative — asserts no false positives across all 8 deterministic rules), `013-placeholder-todo` (PR008 TODO variant), `i18n/de-002-platzhalter` (DE placeholder).
+- `references/lint-rules.md` — every rule now carries an `Engine: deterministic | model | hybrid` line plus a top-of-file legend explaining the split.
+
+### Changed (BREAKING for output consumers)
+- `scripts/run-tests.sh` rewritten: now actually executes `scripts/lint.js` against each corpus body and asserts `expected_rules` fire and `forbidden_rules` do not, instead of only validating frontmatter structure. 17/17 cases pass.
+- `skills/prompt-refiner/SKILL.md` procedure restructured to two passes (deterministic via `scripts/lint.js`, then model layer for `PR002`/`PR003`/`PR005`/`PR009`/`PR010`). Output format gains an `_(engine)_` tag per finding.
+- `README.md` reframed as "hybrid linter" with an explicit table of which rules are deterministic vs model. Drops badges/copy that overpromised pure-linter behavior; conformance badge now shows `17/17`.
+- `PR001` EN verb list drops `do` (too overloaded — `do not`, `do you`, `do whatever`). Documented as an explicit exclusion in `references/lint-rules.md`. The remaining EN verbs (`handle`, `process`, `manage`, `deal with`, `take care of`, `work on`, `look at`, `figure out`) plus DE/ES/JA lists are unchanged.
+- Plugin manifests (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`) bumped to `1.3.0`; descriptions updated to describe the hybrid engine; new keyword `hybrid-linter` added to the marketplace entry.
+
+### Notes
+- No npm dependencies introduced — the detector uses Node stdlib only. Node was already required by `scripts/validate-skill.sh`, so this is not a new install requirement.
+- `schemas/report.schema.json` extended: each finding may now include an optional `engine` field (`"deterministic"` | `"model"`). The detector emits `engine: "deterministic"` on every finding. Reports without `engine` remain valid against the schema (the field is optional).
+- Stability contract sharpens: for the 8 deterministic rules, same input → same `(rule_id, line, col, evidence)` across runs. For the 5 model rules, run-to-run drift is expected and the engine tag makes it visible.
+
+---
+
 ## [1.2.0] - 2026-04-29
 
 **Linter pivot.** The skill flips from refiner to linter: it now flags prompt-engineering bugs against a stable rule catalog (`PR001`–`PR-INJ03`) and never rewrites the user's prompt. The three intensity modes (`light` / `strict` / `review`) and the fixed two-section output (`## Improved prompt` / `## Result`) are removed.

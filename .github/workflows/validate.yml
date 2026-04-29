@@ -14,3 +14,6 @@ jobs:
 
       - name: Run skill validator
         run: bash scripts/validate-skill.sh
+
+      - name: Run conformance suite
+        run: bash scripts/run-tests.sh
